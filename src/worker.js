@@ -99,10 +99,30 @@ function buildMarketState(dayISO, opts) {
 /* 生データを「YYYY-MM-DD → 値」の対応表にする */
 function dayKey(iso) { return String(iso).slice(0, 10); }
 
-function pickQuotes(data) {
-  const arr = data && data.BTC && Array.isArray(data.BTC)
-    ? (data.BTC[0] && data.BTC[0].quotes) || []
-    : (data && data.quotes) || [];
+/* CMC は聞き方で返事の形が変わる。
+   symbol=BTC → data: { "BTC": [ {quotes}, {偽トークン}, ... ] }
+   id=1       → data: { "1": {quotes} }  または data: {quotes}
+   どの形でも、本物（id=1 か、quotes が入っている最初の1件）の行を拾う。 */
+function extractRows(data, wantId) {
+  if (!data) return [];
+  if (Array.isArray(data.quotes)) return data.quotes;
+
+  const candidates = [];
+  for (const v of Object.values(data)) {
+    if (Array.isArray(v)) candidates.push(...v);
+    else if (v && typeof v === "object") candidates.push(v);
+  }
+  const want = String(wantId);
+  const exact = candidates.find(
+    (c) => String(c.id) === want && Array.isArray(c.quotes) && c.quotes.length
+  );
+  if (exact) return exact.quotes;
+  const any = candidates.find((c) => Array.isArray(c.quotes) && c.quotes.length);
+  return any ? any.quotes : [];
+}
+
+function pickQuotes(data, wantId) {
+  const arr = extractRows(data, wantId);
   const m = new Map();
   for (const row of arr) {
     const usd = row.quote && row.quote.USD ? row.quote.USD : null;
@@ -119,10 +139,8 @@ function pickQuotes(data) {
   return m;
 }
 
-function pickOhlcv(data) {
-  const arr = data && data.BTC && Array.isArray(data.BTC)
-    ? (data.BTC[0] && data.BTC[0].quotes) || []
-    : (data && data.quotes) || [];
+function pickOhlcv(data, wantId) {
+  const arr = extractRows(data, wantId);
   const m = new Map();
   for (const row of arr) {
     const usd = row.quote && row.quote.USD ? row.quote.USD : null;
@@ -198,8 +216,8 @@ export default {
           hit(env, "/v3/fear-and-greed/historical", { start: 1, limit: 500 }),
         ]);
 
-        const qi = pickQuotes(q.response.data);
-        const oi = pickOhlcv(o.response.data);
+        const qi = pickQuotes(q.response.data, id);
+        const oi = pickOhlcv(o.response.data, id);
         const fi = pickFng(f.response.data);
 
         const days = [...qi.keys()].sort();
