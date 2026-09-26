@@ -360,8 +360,8 @@ export function replay(tl, i, limit) {
   const points = REPLAY_OFFSETS.map((o) => {
     const j = i + o;
     const day = dayAt(tl, j);
+    if (j > limit) return { offset: o, day, state: "unknown" }; // 倉庫の最後の日より先も「まだ誰も知らない」
     if (j < 0 || j >= tl.n) return { offset: o, day, state: "outside" };
-    if (j > limit) return { offset: o, day, state: "unknown" };
     const p = tl.axes.price[j];
     return {
       offset: o, day, state: "seen",
