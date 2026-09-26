@@ -394,6 +394,68 @@ export function replay(tl, i, limit) {
   return { event: dayAt(tl, i), points, path, from: lo, to: hi };
 }
 
+/* ──────────────────────────────────────────
+   ほかの窓（数字の窓）を、同じ STATE のやり方で比べる（2026-09-27）
+   ・窓の値は「その日に起きた分」。D 00:00 に見えていたのは D − lag の分まで。
+     だから i 日目に置く値は、窓の (i − lag) 日目の値（asOfColumn）
+   ・STATE = 過去1年（その時点で見えていた分だけ）の中の位置。30日未満なら ABSENT
+   ・似ている度合い = 1 − 窓の日ごとの差の平均（STATE と同じ。8割以上そろった成分だけ使う）
+   CMC の探し方には混ぜない。窓ごとに別々に「その窓から見て似ているか」を出す
+   ────────────────────────────────────────── */
+export function asOfColumn(tl, from, values, lag, map = (x) => x) {
+  const out = new Float64Array(tl.n).fill(NaN);
+  if (!values || !values.length) return out;
+  const off = dayNum(from) - tl.d0; // 窓の 0 番目が、倉庫の何日目か
+  for (let i = 0; i < tl.n; i++) {
+    const j = i - lag - off;
+    if (j < 0 || j >= values.length) continue;
+    const v = values[j];
+    if (typeof v !== "number" || !Number.isFinite(v)) continue;
+    const m = map(v);
+    if (Number.isFinite(m)) out[i] = m;
+  }
+  return out;
+}
+export function rangeState(x) {
+  const n = x.length;
+  const { lo, hi, cnt } = rollingRange(x, NORM_DAYS);
+  const v = new Float64Array(n).fill(NaN);
+  for (let i = 0; i < n; i++) {
+    const xi = x[i];
+    if (Number.isNaN(xi) || cnt[i] < MIN_NORM_DAYS) continue;
+    const span = hi[i] - lo[i];
+    v[i] = span > 0 ? (xi - lo[i]) / span : 0.5;
+  }
+  return v;
+}
+/* 7日平均（5日以上そろっている日だけ）。ハッシュレートのように1日ごとにぶれる値に */
+export function mean7(values) {
+  const out = new Array(values.length).fill(null);
+  for (let j = 0; j < values.length; j++) {
+    let s = 0, c = 0;
+    for (let k = Math.max(0, j - 6); k <= j; k++) { const v = values[k]; if (typeof v === "number" && Number.isFinite(v)) { s += v; c++; } }
+    if (c >= 5 && typeof values[j] === "number") out[j] = s / c;
+  }
+  return out;
+}
+export function windowSimilarity(comps, q, c, w) {
+  const need = Math.ceil(MIN_SHARE * w);
+  let sd = 0, used = 0;
+  for (const a of comps) {
+    let sum = 0, cnt = 0;
+    for (let t = 0; t < w; t++) {
+      if (q - t < 0 || c - t < 0) continue;
+      const x = a[q - t], y = a[c - t];
+      if (Number.isNaN(x) || Number.isNaN(y)) continue;
+      sum += Math.abs(x - y);
+      cnt++;
+    }
+    if (cnt >= need && cnt > 0) { sd += sum / cnt; used++; }
+  }
+  if (!used) return null;
+  return { similarity: Math.round((1 - sd / used) * 1000) / 1000, used, of: comps.length };
+}
+
 /* まとめて使う入口 */
 export function createExplorer(series) {
   const tl = buildTimeline(series);

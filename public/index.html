@@ -261,6 +261,58 @@
   details.times dl { display: grid; grid-template-columns: 96px 1fr; gap: 3px 10px; margin: 0; font-size: 12px; }
   details.times dt { color: var(--muted); }
   details.times dd { margin: 0; color: var(--ink-2); overflow-wrap: anywhere; }
+  .cmp { display: flex; flex-direction: column; gap: 5px; }
+  .cmp-row { display: grid; grid-template-columns: 74px repeat(4, minmax(0, 1fr)); gap: 6px; align-items: center; width: 100%; padding: 8px 8px; border: 0; border-radius: 10px; background: transparent; text-align: left; font: inherit; color: inherit; }
+  .cmp-row.head { padding-top: 0; padding-bottom: 0; font-size: 11px; color: var(--muted); }
+  .cmp-row.d { background: var(--wash); }
+  button.cmp-row { cursor: pointer; background: var(--plane); box-shadow: inset 0 0 0 1px var(--ring); }
+  button.cmp-row[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--series-sel); }
+  .cmp .who { display: grid; grid-template-columns: 3px 1fr; column-gap: 6px; align-items: center; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; }
+  .cmp .who .k { grid-row: 1 / span 2; width: 3px; height: 26px; border-radius: 2px; }
+  .cmp .who b { font-size: 12px; font-weight: 700; }
+  .cmp .who small { font-size: 10.5px; color: var(--ink-2); }
+  .cmp .c { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-variant-numeric: tabular-nums; }
+  .cmp .c b { font-size: 13px; font-weight: 650; white-space: nowrap; overflow: hidden; }
+  .cmp .c small { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cmp .c .meter { flex: none; width: 100%; max-width: 46px; height: 3px; }
+  .cmp-notes { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  /* ── the light surface (2026-09-27): one thing to do first, the rest in the drawer ── */
+  .hero { padding: 18px 2px 16px; }
+  .hero h1 { margin: 0; font-size: 34px; line-height: 1; font-weight: 750; letter-spacing: -0.03em; }
+  .hero .lede { margin: 10px 0 14px; font-size: 16px; line-height: 1.4; color: var(--ink-2); }
+  .pick { display: flex; gap: 8px; }
+  .pick input[type="date"] { height: 50px; font-size: 17px; font-weight: 600; background: var(--surface); }
+  .pick .btn { height: 50px; background: var(--surface); }
+  .try { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .try button { min-height: 34px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--wash); color: var(--ink-2); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
+  .try button[aria-pressed="true"] { background: var(--on-bg); color: var(--on-ink); }
+  h2 { margin: 0 0 12px; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+  .quiet { margin: 10px 2px 0; font-size: 12.5px; color: var(--muted); }
+  .readout { margin: -4px 0 12px; font-size: 15px; color: var(--ink); }
+  .readout .up, .readout .down { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .seg.mini { margin-bottom: 10px; }
+  .seg.mini button { height: 32px; font-size: 13px; }
+  .result .bars { grid-column: 2 / 4; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 6px; }
+  .result .bar { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .result .bar small { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .result .bar .meter { flex: none; max-width: none; width: 100%; height: 4px; }
+  .result .bar[data-state="none"] .meter > i { width: 0 !important; }
+  .result .bar[data-state="none"] small::after { content: " –"; }
+  .result .bar[data-state="wait"] .meter { opacity: 0.4; }
+  .result { transition: box-shadow 0.15s, transform 0.1s; }
+  .result:active, .try button:active, .views button:active { transform: scale(0.98); }
+  .views { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--grid); }
+  .views button { min-height: 34px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--wash); color: var(--ink-2); font-size: 13px; font-weight: 600; cursor: pointer; }
+  .views button[aria-pressed="true"] { background: var(--on-bg); color: var(--on-ink); }
+  .views button:disabled { opacity: 0.4; cursor: default; }
+  details.drawer > summary { min-height: 44px; font-size: 15px; font-weight: 600; color: var(--ink); }
+  details.drawer[open] > summary { margin-bottom: 4px; }
+  details.drawer h3 { margin: 22px 0 10px; font-size: 15px; font-weight: 700; }
+  details.drawer .detail { font-size: 13px; color: var(--ink-2); display: flex; flex-direction: column; gap: 4px; }
+  details.drawer .explain p { font-size: 13px; color: var(--ink-2); margin: 6px 0; }
+  @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .results > *, #world-body > * { animation: rise 0.22s ease-out both; }
+  @media (prefers-reduced-motion: reduce) { .results > *, #world-body > * { animation: none; } .result, .try button, .views button { transition: none; } }
   footer { font-size: 12px; color: var(--muted); padding: 6px 2px; }
   footer a { color: var(--ink-2); }
   .loading { opacity: 0.55; transition: opacity 0.15s; }
@@ -269,74 +321,86 @@
 </head>
 <body>
 <div class="page">
-  <header>
-    <div class="brand"><h1>RE:</h1><span class="sub">A Temporal Exploration Playground</span></div>
-    <p class="lede">Pick a day in Bitcoin's history. RE: finds the pasts that looked most like it — using only what was visible on that day — and replays what came after them.</p>
+  <header class="hero">
+    <h1>RE:</h1>
+    <p class="lede">Pick a day in Bitcoin's history. See the days that looked like it — and what came after them.</p>
+    <div class="pick">
+      <input id="day" type="date" aria-label="Pick a day">
+      <button id="latest" class="btn" type="button">Today</button>
+    </div>
+    <div id="try" class="try" role="group" aria-label="Days to try"></div>
   </header>
 
-  <section class="card" aria-label="Observation conditions">
-    <p class="label">When</p>
-    <div class="row">
-      <input id="day" type="date" aria-label="The day you stand on (D)">
-      <button id="latest" class="btn" type="button">Latest</button>
-    </div>
-    <p class="label">Window</p>
-    <div id="width" class="seg" role="group" aria-label="Window in days"></div>
+  <p id="status" class="status" aria-live="polite">Opening the archive…</p>
 
-    <p class="label">How</p>
-    <div id="mode" class="seg" role="group" aria-label="Observer">
-      <button type="button" data-mode="STATE">STATE</button>
-      <button type="button" data-mode="TRAJECTORY">TRAJECTORY</button>
-    </div>
-    <p id="mode-hint" class="hint"></p>
-
-    <p class="label">What</p>
-    <div id="chips" class="chips"></div>
-    <p class="chip-key">● on · ○ off (tap) · – absent (no data for this window)</p>
-    <div id="absent-why" class="chip-key" style="margin-top:4px"></div>
+  <section class="card" aria-label="Days that looked like it">
+    <h2>Days that looked like it</h2>
+    <div id="results" class="results"></div>
+    <p class="quiet">The market found these days. The bars show how alike each one looks through four windows onto the world.</p>
   </section>
 
-  <p id="status" class="status" aria-live="polite">Loading the archive…</p>
-
-  <section id="replay" class="card" aria-label="Replay">
-    <p class="label">Replay</p>
-    <div id="picker" class="seg" role="group" aria-label="Choose a similar past" style="margin-bottom:10px"></div>
+  <section id="replay" class="card" aria-label="What happened next">
+    <h2>What happened next</h2>
+    <p id="readout" class="readout"></p>
+    <div id="picker" class="seg mini" role="group" aria-label="Choose a day that looked like it"></div>
     <div id="legend" class="legend"></div>
     <div class="chart-wrap">
       <svg id="chart" viewBox="0 0 360 230" role="img" tabindex="0" aria-label="Price change around the event day"></svg>
       <div id="tip" class="tip" aria-hidden="true"></div>
     </div>
-    <table id="table" aria-label="Replay checkpoints"></table>
-    <div id="why-wrap">
-      <p class="label" style="margin-top:14px">Why it matched</p>
-      <div id="why" class="why"></div>
-    </div>
   </section>
 
   <section id="world" class="card" aria-label="The world that day" style="display:none">
-    <p class="label">The world that day</p>
-    <div id="world-view" class="seg" role="group" aria-label="Which day, seen how" style="margin-bottom:12px">
-      <button type="button" data-wv="asof">As of D</button>
-      <button type="button" data-wv="hind">Hindsight</button>
-      <button type="button" data-wv="past">Past</button>
-    </div>
+    <h2>The world that day</h2>
     <p id="world-day" class="world-day"></p>
-    <p id="world-note" class="note" style="margin:0 0 10px"></p>
+    <p id="world-note" class="quiet" style="margin:0 0 12px"></p>
     <div id="world-body" class="world" aria-live="polite"></div>
+    <div id="world-view" class="views" role="group" aria-label="Which day to look at">
+      <button type="button" data-wv="past">Past</button>
+      <button type="button" data-wv="asof">D, as seen then</button>
+      <button type="button" data-wv="hind">D, as known now</button>
+    </div>
   </section>
 
-  <section class="card" aria-label="Similar pasts">
-    <p class="label">Similar pasts</p>
-    <div id="results" class="results"></div>
-    <details>
-      <summary>How RE: measures “similar”</summary>
-      <p><strong>STATE</strong> puts each axis on a 0–1 scale: where it stood within its own past year, using only data up to that day. Price, market cap, volatility and the change figures use the past-year range; volume is compared on a log scale; Fear &amp; Greed is its 0–100 value. With less than 30 days of past an axis is absent; with less than a year, the number of days used is shown next to the result.</p>
-      <p><strong>TRAJECTORY</strong> compares how things moved inside the window, from its first day: price as % change, volume against the window's median (log), volatility as is, Fear &amp; Greed as points gained or lost. Each axis has a fixed scale, so a match does not depend on which other windows were searched.</p>
-      <p><strong>Strict time</strong>: a past only counts if its 30-day replay had already happened by D. D's own future stays hidden.</p>
-      <p>Only axes present on both sides are compared; their weights are shared out again. A past is compared only if at least half of D's axes (by weight) can be compared there — the ones left out are counted above, not hidden.</p>
-      <p>RE: shows what followed similar pasts. It is not a forecast and not investment advice.</p>
-    </details>
-  </section>
+  <details id="more" class="card drawer">
+    <summary>Adjust &amp; how it works</summary>
+
+    <h3>Look differently</h3>
+    <p class="label">Window</p>
+    <div id="width" class="seg" role="group" aria-label="Window in days"></div>
+    <p class="label">Compare by</p>
+    <div id="mode" class="seg" role="group" aria-label="Compare by">
+      <button type="button" data-mode="STATE">Where it stood</button>
+      <button type="button" data-mode="TRAJECTORY">How it moved</button>
+    </div>
+    <p id="mode-hint" class="hint"></p>
+    <p class="label">What the market is made of</p>
+    <div id="chips" class="chips"></div>
+    <p class="chip-key">● on · ○ off (tap) · – absent (no data for this window)</p>
+    <div id="absent-why" class="chip-key" style="margin-top:4px"></div>
+
+    <h3>The numbers behind it</h3>
+    <div id="status-detail" class="detail"></div>
+    <table id="table" aria-label="Replay checkpoints"></table>
+    <div id="why-wrap">
+      <p class="label" style="margin-top:14px">Why it matched (market)</p>
+      <div id="why" class="why"></div>
+    </div>
+
+    <h3>Through each window</h3>
+    <div id="compare-grid" class="cmp" role="table" aria-label="How alike each day looks to D, window by window"></div>
+    <div id="compare-notes" class="cmp-notes"></div>
+
+    <h3>How RE: measures “similar”</h3>
+    <div class="explain">
+      <p><strong>Where it stood</strong> (STATE) puts each axis on a 0–1 scale: where it stood within its own past year, using only data up to that day. Price, market cap, volatility and the change figures use the past-year range; volume is compared on a log scale; Fear &amp; Greed is its 0–100 value. With less than 30 days of past an axis is absent; with less than a year, the number of days used is shown.</p>
+      <p><strong>How it moved</strong> (TRAJECTORY) compares how things moved inside the window, from its first day: price as % change, volume against the window's median (log), volatility as is, Fear &amp; Greed as points gained or lost. Each axis has a fixed scale, so a match does not depend on which other windows were searched.</p>
+      <p><strong>Strict time</strong>: a past day only counts if its next 30 days had already happened by D. D's own future stays hidden.</p>
+      <p>Only axes present on both sides are compared; their weights are shared out again. A past day is compared only if at least half of D's axes (by weight) can be compared there — the ones left out are counted, not hidden.</p>
+      <p><strong>Other windows</strong> (Wikipedia, weather, the Bitcoin network) never change which days are found. They only show how alike those days look from somewhere else, using what had come out by 00:00 UTC of each day.</p>
+      <p>RE: shows what followed similar days. It is not a forecast and not investment advice.</p>
+    </div>
+  </details>
 
   <footer id="footer">Data: CoinMarketCap API (quotes, OHLCV and Fear &amp; Greed history), kept in RE:'s own archive.</footer>
 </div>
