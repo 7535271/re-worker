@@ -38,8 +38,6 @@ const PLACES = [
 ];
 const placeNow = () => PLACES.find((x) => x.id === S.place) || PLACES[0];
 let ex = null, meta = {}, res = null, view = null;
-/* the days you have stood on, in order ("2020-03-12 → 2013-09-08 → …"). A new start clears it */
-let trail = [];
 
 /* ── formatting ── */
 const MINUS = "−";
@@ -106,8 +104,6 @@ function readHash() {
   S.view = VIEWS.includes(h.get("v")) ? h.get("v") : "home";
   S.dv = h.get("dv") === "hind" ? "hind" : "asof";
   S.open = h.get("o") || null;
-  const t = (h.get("t") || "").split(",").filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x));
-  trail = t.length ? t : [];
 }
 function writeHash(push = false) {
   const parts = [`d=${S.day}`];
@@ -119,7 +115,6 @@ function writeHash(push = false) {
   if (S.view !== "home") parts.push(`v=${S.view}`);
   if (S.view === "day" && S.dv !== "asof") parts.push(`dv=${S.dv}`);
   if (S.open) parts.push(`o=${S.open}`);
-  if (trail.length > 1) parts.push(`t=${trail.join(",")}`);
   history[push ? "pushState" : "replaceState"]({ re: true }, "", "#" + parts.join("&"));
 }
 
@@ -141,7 +136,6 @@ async function boot() {
   }
   meta = series.meta || {};
   if (!S.day || S.day < ex.first || S.day > ex.last) S.day = ex.last;
-  if (!trail.length || trail[trail.length - 1] !== S.day) trail = [S.day];
   setupControls();
   renderFooter();
   run(false);
@@ -152,7 +146,6 @@ async function boot() {
     readHash();
     if (!new URLSearchParams(location.hash.slice(1)).has("pl")) S.place = place;
     if (S.day < ex.first || S.day > ex.last) S.day = ex.last;
-    if (!trail.length) trail = [S.day];
     run(false);
     if (S.place !== PLACES[0].id) writeHash(false);
   });
@@ -187,7 +180,7 @@ function setupControls() {
   $("p-prev").addEventListener("click", () => go({ sel: S.sel - 1, open: null }, false));
   $("p-next").addEventListener("click", () => go({ sel: S.sel + 1, open: null }, false));
   $("stand").addEventListener("click", standHere);
-  // the mark: back to the day you stand on, keeping the path (unlike Today or a new date, which start a new path)
+  // the mark: back to the day you stand on, from any screen
   $("mark").addEventListener("click", () => {
     if (S.view === "home") { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
     go({ view: "home", open: null });
@@ -220,22 +213,19 @@ function back() {
   if (history.state && history.state.re && history.length > 1 && S.view !== "home") history.back();
   else go({ view: "home", open: null }, false);
 }
-function setDay(d, keepTrail = false) {
+function setDay(d) {
   S.day = d < ex.first ? ex.first : d > ex.last ? ex.last : d;
   S.sel = 0;
   S.open = null;
-  if (!keepTrail) trail = [S.day];
   run();
 }
 function stepDay(k) {
   setDay(ymdOf(dayNum(S.day) + k));
 }
-/* stand on a day that looked like it: it becomes the new D, and the path grows */
+/* stand on a day that looked like it: it becomes the new D (the back swipe returns to where you were) */
 function standHere() {
   const r = res.results[S.sel];
   if (!r) return;
-  const at = trail.indexOf(S.day);
-  trail = (at >= 0 ? trail.slice(0, at + 1) : [S.day]).concat(r.day);
   S.day = r.day;
   S.sel = 0;
   S.view = "home";
@@ -265,23 +255,6 @@ function render() {
   else renderHow();
 }
 
-/* the path you walked: tap a day to stand on it again */
-function renderTrail(box, extra) {
-  box.textContent = "";
-  const items = trail.length > 1 || extra ? trail.slice() : [];
-  items.forEach((d, i) => {
-    if (i) box.append(el("span", { class: "arrow", "aria-hidden": "true" }, "→"));
-    const b = el("button", { type: "button", "aria-current": String(d === S.day && !extra) }, d);
-    b.addEventListener("click", () => {
-      trail = trail.slice(0, i + 1);
-      S.day = d; S.sel = 0; S.view = "home"; S.open = null;
-      run(false); writeHash(true);
-    });
-    box.append(b);
-  });
-  if (extra) { box.append(el("span", { class: "arrow", "aria-hidden": "true" }, "→"), el("span", {}, extra)); }
-}
-
 /* a day with a thin past: say which kind, and how many days were there */
 function histTag(cov, day) {
   if (cov === null || cov === undefined || cov >= 365) return null;
@@ -292,7 +265,6 @@ const niceDay = (d) => { const [y, m, dd] = ymdParts(d); return `${y} · ${MONTH
 
 /* ── 1. the day you stand on ── */
 function renderHome() {
-  renderTrail($("trail"));
   const [y, m, d] = ymdParts(S.day);
   $("h-yr").textContent = String(y);
   $("h-mo").textContent = MONTHS[m - 1].toUpperCase();
@@ -353,7 +325,6 @@ const limitFor = (r) => (r && r.later ? ex.last : S.day);
 const revealed = new Set(); // "D|that day" pairs whose "next" has been opened in this visit
 function renderPast() {
   const r = res.results[S.sel];
-  renderTrail($("trail"), r.day);
   $("p-title").textContent = niceDay(r.day);
   $("p-sub").textContent = r.later
     ? `Later in history. The market says this day felt like ${S.day}.`
@@ -556,7 +527,6 @@ const WORLD_NOTE = {
   hind: "What happened on this day, as we know it now. None of it could be seen at 00:00 UTC, and RE: never uses it to find look-alike days.",
 };
 function renderDay() {
-  renderTrail($("trail"));
   $("d-title").textContent = niceDay(S.day);
   for (const b of $("d-view").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.dv === S.dv));
   $("d-note").textContent = WORLD_NOTE[S.dv] + (S.dv === "hind" && S.day >= todayUTC() ? " This day is not over yet." : "");
@@ -804,7 +774,6 @@ function coverageNote(r) {
 
 /* ── 4. how it works, and the knobs ── */
 function renderHow() {
-  renderTrail($("trail"));
   for (const b of $("width").querySelectorAll("button")) {
     const w = Number(b.dataset.w);
     b.setAttribute("aria-pressed", String(w === S.width));

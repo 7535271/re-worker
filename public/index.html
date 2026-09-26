@@ -336,10 +336,6 @@
   }
   /* a colon sits between the baseline and the lowercase height, so next to capitals it looks low: lift it to the middle of the capitals */
   .topline .mark .colon { color: var(--brand-colon); position: relative; top: -0.09em; }
-  .trail { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 0; }
-  .trail button { border: 0; background: none; padding: 4px 2px; color: var(--ink-2); font: inherit; font-weight: 600; cursor: pointer; }
-  .trail button[aria-current="true"] { color: var(--ink); }
-  .trail .arrow { color: var(--axis); }
   .stage { text-align: center; padding: 18px 0 8px; }
   .ov { position: relative; display: inline-block; cursor: pointer; }
   .ov select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px; cursor: pointer; -webkit-appearance: none; appearance: none; }
@@ -452,10 +448,9 @@
 </head>
 <body>
 <div class="page">
-  <!-- the same mark in the same place on every screen: tap it to go back to the day you stand on (the path is kept) -->
+  <!-- the same mark in the same place on every screen: tap it to go back to the day you stand on -->
   <header class="topline">
     <button id="mark" class="mark" type="button" aria-label="RE: — back to the day you stand on">RE<span class="colon">:</span></button>
-    <nav id="trail" class="trail" aria-label="Where you have stood"></nav>
   </header>
 
   <!-- 1. the day you stand on -->
