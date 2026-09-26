@@ -913,6 +913,199 @@ function analyzeTiming(log) {
   };
 }
 
+/* ──────────────────────────────────────────
+   他の窓の probe（2026-09-26〜）
+   CMC のときと同じ。組み込む前に、まずその窓が何を見せてくれるかを実際に叩いて見る。
+   ・/probe/wiki      Wikipedia の閲覧数（記事ごとの日次、他言語、リダイレクト、全体量）
+   ・/probe/wiki-top  Wikipedia のその日の人気記事（いつから、何件、国・言語で変わるか、公開の遅れ）
+   ・/probe/gdelt     GDELT の報道量（どこまで遡れるか。5秒に1回の制限があるので間を空けて叩く）
+   ────────────────────────────────────────── */
+const UA = "RE-TemporalPlayground/0.3 (+https://github.com/7535271/re-worker)";
+const WIKI = "https://wikimedia.org/api/rest_v1/metrics/pageviews";
+const GDELT = "https://api.gdeltproject.org/api/v2/doc/doc";
+
+/* 外の窓を叩いて、リクエストと返事（状態・一部のヘッダ・かかった時間・中身）を記録する */
+async function look(url) {
+  const at = new Date().toISOString();
+  const t0 = Date.now();
+  let status = -1, body = null, text = null;
+  const headers = {};
+  try {
+    const r = await fetch(url, { headers: { "User-Agent": UA, "Api-User-Agent": UA, Accept: "application/json" } });
+    status = r.status;
+    for (const k of ["content-type", "cache-control", "age", "retry-after", "x-ratelimit-limit", "x-ratelimit-remaining", "ratelimit", "ratelimit-policy"]) {
+      const v = r.headers.get(k);
+      if (v) headers[k] = v;
+    }
+    const t = await r.text();
+    try { body = JSON.parse(t); } catch { text = t.slice(0, 600); }
+  } catch (e) {
+    text = String(e && e.message ? e.message : e);
+  }
+  return { request: { url, at }, response: { http_status: status, ms: Date.now() - t0, headers, body, text } };
+}
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const ymdCompact = (d) => d.replace(/-/g, "");
+
+/* 日次の並び（Wikipedia の per-article / aggregate）を要約する */
+function wikiSeries(r, today) {
+  const b = r.response.body;
+  const items = b && Array.isArray(b.items) ? b.items : [];
+  if (!items.length) return { http_status: r.response.http_status, items: 0, error: b && (b.title || b.detail) ? { title: b.title, detail: b.detail } : r.response.text };
+  // 日付は整数（何日目か）で扱う。4,000日以上あっても CPU を食わないように
+  const n = items.length;
+  const dn = new Float64Array(n), views = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const ts = String(items[i].timestamp);
+    dn[i] = Date.UTC(+ts.slice(0, 4), +ts.slice(4, 6) - 1, +ts.slice(6, 8)) / DAY;
+    views[i] = typeof items[i].views === "number" ? items[i].views : NaN;
+  }
+  const missing = [];
+  let missingCount = 0, zero = 0, peak = 0;
+  for (let i = 0; i < n; i++) {
+    if (i > 0) for (let d = dn[i - 1] + 1; d < dn[i]; d++) { missingCount++; if (missing.length < 30) missing.push(ymdOf(d)); }
+    if (views[i] === 0) zero++;
+    if (views[i] > views[peak]) peak = i;
+  }
+  const sorted = views.filter((v) => !Number.isNaN(v)).sort();
+  const at = (i) => ({ day: ymdOf(dn[i]), views: views[i] });
+  const last = ymdOf(dn[n - 1]);
+  return {
+    http_status: r.response.http_status,
+    items: n,
+    first: ymdOf(dn[0]), last,
+    newest_is_days_before_today: daysBetween(last, today),
+    missing_days: { count: missingCount, items: missing },
+    zero_view_days: zero,
+    views: { min: sorted[0], median: sorted[sorted.length >> 1], max: sorted[sorted.length - 1] },
+    peak_day: at(peak),
+    fields: Object.keys(items[0]),
+    timestamp_example: items[0].timestamp,
+    first_items: [0, 1, 2].filter((i) => i < n).map(at),
+    last_items: [n - 3, n - 2, n - 1].filter((i) => i >= 0).map(at),
+  };
+}
+
+/* その日の人気記事の一覧を要約する */
+function wikiTop(r, n = 15) {
+  const b = r.response.body;
+  const item = b && Array.isArray(b.items) ? b.items[0] : null;
+  const arts = item && Array.isArray(item.articles) ? item.articles : null;
+  if (!arts) return { http_status: r.response.http_status, articles: 0, error: b && (b.title || b.detail) ? { title: b.title, detail: b.detail } : r.response.text };
+  return {
+    http_status: r.response.http_status,
+    articles: arts.length,
+    fields: Object.keys(arts[0] || {}),
+    top: arts.slice(0, n).map((a) => ({ rank: a.rank, article: a.article, views: a.views ?? a.views_ceil, ...(a.project ? { project: a.project } : {}) })),
+  };
+}
+
+async function probeWiki() {
+  const today = dayKey(iso(nowMs()));
+  const calls = {
+    bitcoin_en: `${WIKI}/per-article/en.wikipedia/all-access/user/Bitcoin/daily/20150601/${ymdCompact(today)}`,
+    bitcoin_en_all_agents_2020_03: `${WIKI}/per-article/en.wikipedia/all-access/all-agents/Bitcoin/daily/20200301/20200331`,
+    bitcoin_en_user_2020_03: `${WIKI}/per-article/en.wikipedia/all-access/user/Bitcoin/daily/20200301/20200331`,
+    redirect_BTC_en_2020_03: `${WIKI}/per-article/en.wikipedia/all-access/user/BTC/daily/20200301/20200331`,
+    bitcoin_ja_2020_03: `${WIKI}/per-article/ja.wikipedia/all-access/user/${encodeURIComponent("ビットコイン")}/daily/20200301/20200331`,
+    aggregate_en_2020_03: `${WIKI}/aggregate/en.wikipedia/all-access/user/daily/20200301/20200331`,
+  };
+  const keys = Object.keys(calls);
+  const res = await Promise.all(keys.map((k) => look(calls[k])));
+  const summary = {};
+  keys.forEach((k, i) => { summary[k] = wikiSeries(res[i], today); });
+  const trim = (r) => ({ request: r.request, response: { http_status: r.response.http_status, ms: r.response.ms, headers: r.response.headers, text: r.response.text } });
+  return {
+    _summary: summary,
+    notes: [
+      "bitcoin_en asks from 2015-06-01 on purpose, to see where the data really starts.",
+      "user vs all-agents (2020-03) shows how much of the traffic the API counts as people.",
+      "BTC is a redirect to Bitcoin: its views are counted separately, not merged.",
+      "aggregate_en is all of English Wikipedia per day — the size of the whole room the Bitcoin article sits in.",
+    ],
+    calls: keys.map((k, i) => ({ name: k, ...trim(res[i]) })),
+  };
+}
+
+async function probeWikiTop() {
+  const today = dayKey(iso(nowMs()));
+  const slash = (d) => d.replace(/-/g, "/");
+  const recent = [1, 2, 3].map((n) => shiftDay(today, -n));
+  const calls = {
+    en_2020_03_12: `${WIKI}/top/en.wikipedia/all-access/2020/03/12`,
+    ja_2020_03_12: `${WIKI}/top/ja.wikipedia/all-access/2020/03/12`,
+    en_2015_07_01: `${WIKI}/top/en.wikipedia/all-access/2015/07/01`,
+    en_2015_06_30: `${WIKI}/top/en.wikipedia/all-access/2015/06/30`,
+    country_JP_2024_01_01: `${WIKI}/top-per-country/JP/all-access/2024/01/01`,
+    country_JP_2020_03_12: `${WIKI}/top-per-country/JP/all-access/2020/03/12`,
+  };
+  for (const d of recent) calls[`en_${d.replace(/-/g, "_")}`] = `${WIKI}/top/en.wikipedia/all-access/${slash(d)}`;
+  const keys = Object.keys(calls);
+  const res = await Promise.all(keys.map((k) => look(calls[k])));
+  const summary = {};
+  keys.forEach((k, i) => { summary[k] = wikiTop(res[i], k.startsWith("en_2015") || k.startsWith("en_20") && !k.includes("2020") ? 5 : 15); });
+  const newest = recent.find((d) => (summary[`en_${d.replace(/-/g, "_")}`] || {}).articles > 0) || null;
+  return {
+    _summary: { newest_top_list: newest, ...summary },
+    notes: [
+      "en_2015_07_01 and en_2015_06_30 check where the daily top lists begin.",
+      "The last three en_ entries check how many days late the newest top list is.",
+      "country_JP asks which pages people in Japan read (across all projects), in 2024 and in 2020.",
+    ],
+    calls: keys.map((k, i) => ({ name: k, request: res[i].request, response: { http_status: res[i].response.http_status, ms: res[i].response.ms, headers: res[i].response.headers, text: res[i].response.text } })),
+  };
+}
+
+/* GDELT の報道量の時系列を要約する */
+function gdeltTimeline(r) {
+  const b = r.response.body;
+  const tl = b && Array.isArray(b.timeline) ? b.timeline : null;
+  if (!tl) return { http_status: r.response.http_status, points: 0, text: r.response.text, keys: b ? Object.keys(b) : null };
+  return {
+    http_status: r.response.http_status,
+    series: tl.map((s) => {
+      const data = Array.isArray(s.data) ? s.data : [];
+      const step = data.length > 1 ? (Date.parse(gdeltIso(data[1].date)) - Date.parse(gdeltIso(data[0].date))) / 60000 : null;
+      return {
+        name: s.series,
+        points: data.length,
+        first: data[0] ? data[0].date : null,
+        last: data.length ? data[data.length - 1].date : null,
+        step_minutes: step,
+        fields: data[0] ? Object.keys(data[0]) : [],
+        first_items: data.slice(0, 3),
+        last_items: data.slice(-2),
+      };
+    }),
+  };
+}
+function gdeltIso(d) { const s = String(d || ""); return s.length >= 15 ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T${s.slice(9, 11)}:${s.slice(11, 13)}:${s.slice(13, 15)}Z` : s; }
+
+async function probeGdelt() {
+  const q = (params) => `${GDELT}?${new URLSearchParams({ query: "bitcoin", mode: "timelinevolraw", format: "json", ...params })}`;
+  const calls = [
+    ["before_2017", q({ startdatetime: "20161201000000", enddatetime: "20161231235959" })],
+    ["2017_01", q({ startdatetime: "20170101000000", enddatetime: "20170131235959" })],
+    ["2020_03", q({ startdatetime: "20200301000000", enddatetime: "20200331235959" })],
+    ["last_7_days", q({ timespan: "7d" })],
+  ];
+  const out = [];
+  for (let i = 0; i < calls.length; i++) {
+    if (i) await wait(5500); // GDELT は 5 秒に 1 回まで（待っている時間は CPU に数えない）
+    const r = await look(calls[i][1]);
+    out.push({ name: calls[i][0], summary: gdeltTimeline(r), request: r.request, response: { http_status: r.response.http_status, ms: r.response.ms, headers: r.response.headers } });
+  }
+  return {
+    _summary: Object.fromEntries(out.map((o) => [o.name, o.summary])),
+    notes: [
+      "Query 'bitcoin', mode timelinevolraw (number of matching articles over time).",
+      "before_2017 vs 2017_01 checks where the searchable archive starts; 2020_03 checks a month we already look at in RE:.",
+      "Calls are spaced 5.5 s apart because GDELT allows one request every 5 seconds per IP (Cloudflare IPs are shared, so a 429 is itself an observation).",
+    ],
+    calls: out.map((o) => ({ name: o.name, request: o.request, response: o.response })),
+  };
+}
+
 /* cron: 毎時 5分・35分。F&G の観測 → 倉庫の1歩 */
 async function runCron(env, scheduledTime) {
   if (!env.CMC_KEY || !env.RE_CACHE) return;
@@ -950,12 +1143,20 @@ export default {
             "/probe/btc, /probe/ohlcv — raw CMC responses (evidence)",
             "/probe/fng — every Fear & Greed page, with oldest/newest, missing and duplicate days (?raw=1 for every row)",
             "/probe/fng-timing — when each Fear & Greed value first appeared in the API, and which live value it equals",
+            "/probe/wiki — Wikipedia page views: where the daily series starts, gaps, delay, other languages, redirects, the whole-site total",
+            "/probe/wiki-top — Wikipedia's most-read pages of a day: where they start, how many, by language and country, how late the newest list is",
+            "/probe/gdelt — GDELT news volume for 'bitcoin': how far back it reaches (takes ~20 s: GDELT allows one call every 5 s)",
           ],
           archive_layout: ARCHIVE_LAYOUT,
           fng_time_note: FNG_TIME_NOTE,
           note: "id=1 is the real Bitcoin. symbol=BTC also returns unrelated tokens with the same symbol, so always use id.",
         });
       }
+
+      /* ── 他の窓の probe（CMC のキーも倉庫もいらない）── */
+      if (p === "/probe/wiki") return out(await probeWiki());
+      if (p === "/probe/wiki-top") return out(await probeWikiTop());
+      if (p === "/probe/gdelt") return out(await probeGdelt());
 
       /* ── 倉庫だけで答えるもの（CMC を叩かない）── */
       if (p === "/series" || p === "/archive/status" || p === "/probe/fng-timing") {
