@@ -925,13 +925,16 @@ const WIKI = "https://wikimedia.org/api/rest_v1/metrics/pageviews";
 const GDELT = "https://api.gdeltproject.org/api/v2/doc/doc";
 
 /* 外の窓を叩いて、リクエストと返事（状態・一部のヘッダ・かかった時間・中身）を記録する */
-async function look(url) {
+async function look(url, opts = {}) {
   const at = new Date().toISOString();
   const t0 = Date.now();
   let status = -1, body = null, text = null;
   const headers = {};
+  // 返事が来ない窓もある。待ち続けずに、時間切れも観測として記録する
+  const ctl = opts.timeoutMs ? new AbortController() : null;
+  const timer = ctl ? setTimeout(() => ctl.abort(), opts.timeoutMs) : null;
   try {
-    const r = await fetch(url, { headers: { "User-Agent": UA, "Api-User-Agent": UA, Accept: "application/json" } });
+    const r = await fetch(url, { headers: { "User-Agent": UA, "Api-User-Agent": UA, Accept: "application/json" }, ...(ctl ? { signal: ctl.signal } : {}) });
     status = r.status;
     for (const k of ["content-type", "cache-control", "age", "retry-after", "x-ratelimit-limit", "x-ratelimit-remaining", "ratelimit", "ratelimit-policy"]) {
       const v = r.headers.get(k);
@@ -940,8 +943,9 @@ async function look(url) {
     const t = await r.text();
     try { body = JSON.parse(t); } catch { text = t.slice(0, 600); }
   } catch (e) {
-    text = String(e && e.message ? e.message : e);
+    text = ctl && ctl.signal.aborted ? `no answer within ${opts.timeoutMs / 1000} s (timed out)` : String(e && e.message ? e.message : e);
   }
+  if (timer) clearTimeout(timer);
   return { request: { url, at }, response: { http_status: status, ms: Date.now() - t0, headers, body, text } };
 }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -1093,7 +1097,7 @@ async function probeGdelt(only) {
   const out = [];
   for (let i = 0; i < calls.length; i++) {
     if (i) await wait(5500); // GDELT は 5 秒に 1 回まで（待っている時間は CPU に数えない）
-    const r = await look(calls[i][1]);
+    const r = await look(calls[i][1], { timeoutMs: 12000 });
     out.push({ name: calls[i][0], summary: gdeltTimeline(r), request: r.request, response: { http_status: r.response.http_status, ms: r.response.ms, headers: r.response.headers } });
   }
   return {
