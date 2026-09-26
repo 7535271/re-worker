@@ -936,11 +936,13 @@ export default {
     const p = url.pathname.replace(/\/+$/, "") || "/";
 
     try {
-      if (p === "/") {
+      // 画面（public/index.html）がある間は "/" は静的ファイルが先に返す。API の一覧は /api でも見られる
+      if (p === "/" || p === "/api") {
         return out({
           name: "RE: — A Temporal Exploration Playground (worker)",
           definition: DEFINITION,
           endpoints: [
+            "/ — the app (public/index.html, public/app.js, public/engine.js)",
             "/series?id=1 — every stored day for the asset, from the archive (no CMC call). Optional &from=2020&to=2024 (years)",
             "/archive/status — what the archive holds, what is missing, recent errors",
             "/archive/step — do one unit of archive work now (build one missing year, or refresh the recent days)",
