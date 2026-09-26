@@ -1,1 +1,311 @@
-x
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>RE: Temporal Playground</title>
+<meta name="description" content="Pick a day in Bitcoin's history. RE: finds the most similar pasts that were already visible from that day, and replays what came after them.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b0b0b'/%3E%3Ctext x='32' y='42' font-family='system-ui,sans-serif' font-size='26' font-weight='700' fill='%23fcfcfb' text-anchor='middle'%3ERE:%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    color-scheme: light;
+    --plane: #f9f9f7;
+    --surface: #fcfcfb;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --ring: rgba(11, 11, 11, 0.10);
+    --wash: rgba(11, 11, 11, 0.04);
+    --series-d: #2a78d6;      /* D (the day you stand on) */
+    --series-sel: #eb6834;    /* the similar past you are replaying */
+    --context: #c3c2b7;       /* the other similar pasts */
+    --meter: #52514e;
+    --meter-track: #ecebe6;
+    --on-bg: #0b0b0b;
+    --on-ink: #fcfcfb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --plane: #0d0d0d;
+      --surface: #1a1a19;
+      --ink: #ffffff;
+      --ink-2: #c3c2b7;
+      --muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --ring: rgba(255, 255, 255, 0.10);
+      --wash: rgba(255, 255, 255, 0.05);
+      --series-d: #3987e5;
+      --series-sel: #d95926;
+      --context: #52514e;
+      --meter: #c3c2b7;
+      --meter-track: #2c2c2a;
+      --on-bg: #ffffff;
+      --on-ink: #1a1a19;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --plane: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --ring: rgba(255, 255, 255, 0.10);
+    --wash: rgba(255, 255, 255, 0.05);
+    --series-d: #3987e5;
+    --series-sel: #d95926;
+    --context: #52514e;
+    --meter: #c3c2b7;
+    --meter-track: #2c2c2a;
+    --on-bg: #ffffff;
+    --on-ink: #1a1a19;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--plane);
+    color: var(--ink);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .page {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: calc(12px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  header { padding: 8px 2px 14px; }
+  .brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .brand h1 { margin: 0; font-size: 28px; line-height: 1; font-weight: 750; letter-spacing: -0.02em; }
+  .brand .sub { color: var(--ink-2); font-size: 13px; }
+  .lede { margin: 8px 0 0; color: var(--ink-2); font-size: 14px; }
+
+  .card {
+    background: var(--surface);
+    border-radius: 16px;
+    box-shadow: 0 0 0 1px var(--ring);
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 8px;
+  }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row + .label, .row + .seg, .seg + .label, .hint + .label { margin-top: 14px; }
+
+  input[type="date"] {
+    flex: 1;
+    min-width: 0;
+    height: 44px;
+    padding: 0 12px;
+    font: inherit;
+    font-size: 16px;          /* 16px: iOS does not zoom on focus */
+    color: var(--ink);
+    background: var(--plane);
+    border: 0;
+    border-radius: 10px;
+    box-shadow: inset 0 0 0 1px var(--ring);
+  }
+  button { font: inherit; color: inherit; }
+  .btn {
+    height: 44px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--plane);
+    box-shadow: inset 0 0 0 1px var(--ring);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .seg {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    background: var(--plane);
+    border-radius: 10px;
+    padding: 3px;
+    box-shadow: inset 0 0 0 1px var(--ring);
+  }
+  .seg button {
+    height: 38px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--on-bg); color: var(--on-ink); }
+  .seg button:disabled { color: var(--muted); opacity: 0.45; cursor: default; }
+  .hint { margin: 8px 2px 0; font-size: 13px; color: var(--ink-2); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    min-height: 36px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .chip[data-state="on"] { background: var(--on-bg); color: var(--on-ink); }
+  .chip[data-state="off"] { background: transparent; color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--axis); }
+  .chip[data-state="absent"] { background: var(--wash); color: var(--muted); cursor: default; }
+  .chip .mark { font-size: 11px; opacity: 0.85; }
+  .chip-key { margin: 8px 2px 0; font-size: 12px; color: var(--muted); }
+
+  .status { font-size: 13px; color: var(--ink-2); margin: 2px 2px 12px; }
+  .status strong { color: var(--ink); font-weight: 600; }
+  .note { font-size: 12px; color: var(--muted); }
+  .error { color: var(--ink); background: var(--wash); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+
+  .results { display: flex; flex-direction: column; gap: 6px; }
+  .result {
+    display: grid;
+    grid-template-columns: 22px 1fr auto;
+    gap: 2px 10px;
+    align-items: center;
+    width: 100%;
+    text-align: left;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--plane);
+    box-shadow: inset 0 0 0 1px var(--ring);
+    cursor: pointer;
+  }
+  .result[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--series-sel); }
+  .result .key { width: 18px; height: 3px; border-radius: 2px; background: var(--context); grid-row: 1 / span 2; }
+  .result[aria-pressed="true"] .key { background: var(--series-sel); }
+  .result .when { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .result .sim { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+  .result .meta { grid-column: 2 / 4; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .meter { flex: 1; height: 4px; border-radius: 2px; background: var(--meter-track); overflow: hidden; max-width: 140px; }
+  .meter > i { display: block; height: 100%; border-radius: 2px; background: var(--meter); }
+
+  .chart-wrap { position: relative; margin: 4px -4px 0; }
+  .chart-wrap svg { display: block; width: 100%; height: auto; touch-action: pan-y; outline: none; }
+  .chart-wrap svg:focus-visible { box-shadow: 0 0 0 2px var(--series-d); border-radius: 8px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); margin: 2px 0 6px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { display: inline-block; width: 16px; height: 2px; border-radius: 1px; }
+  .tip {
+    position: absolute;
+    top: 6px;
+    pointer-events: none;
+    background: var(--surface);
+    box-shadow: 0 0 0 1px var(--ring), 0 6px 20px rgba(0, 0, 0, 0.12);
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-size: 12px;
+    min-width: 150px;
+    display: none;
+  }
+  .tip .t { color: var(--muted); margin-bottom: 4px; }
+  .tip .r { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+  .tip .r b { min-width: 58px; text-align: right; font-weight: 700; color: var(--ink); }
+  .tip .r i { display: inline-block; width: 12px; height: 2px; border-radius: 1px; }
+  .tip .r span { color: var(--ink-2); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; margin-top: 10px; }
+  th, td { padding: 7px 6px; text-align: right; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; color: var(--ink-2); }
+  thead th { font-size: 12px; font-weight: 600; color: var(--ink-2); vertical-align: bottom; }
+  thead th .k { display: inline-block; width: 14px; height: 2px; border-radius: 1px; vertical-align: middle; margin-right: 4px; }
+  tr.event td { font-weight: 700; color: var(--ink); }
+  td.unknown { color: var(--muted); }
+  .why { display: grid; grid-template-columns: auto 1fr 44px; gap: 8px 10px; align-items: center; font-size: 13px; margin-top: 6px; }
+  .why .meter { max-width: none; }
+  .why .v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .why .n { color: var(--ink-2); }
+  details { margin-top: 12px; }
+  summary { cursor: pointer; font-size: 13px; color: var(--ink-2); min-height: 32px; display: flex; align-items: center; }
+  details p { font-size: 13px; color: var(--ink-2); margin: 6px 0; }
+  footer { font-size: 12px; color: var(--muted); padding: 6px 2px; }
+  footer a { color: var(--ink-2); }
+  .loading { opacity: 0.55; transition: opacity 0.15s; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="brand"><h1>RE:</h1><span class="sub">A Temporal Exploration Playground</span></div>
+    <p class="lede">Pick a day in Bitcoin's history. RE: finds the pasts that looked most like it — using only what was visible on that day — and replays what came after them.</p>
+  </header>
+
+  <section class="card" aria-label="Observation conditions">
+    <p class="label">When</p>
+    <div class="row">
+      <input id="day" type="date" aria-label="The day you stand on (D)">
+      <button id="latest" class="btn" type="button">Latest</button>
+    </div>
+    <p class="label">Window</p>
+    <div id="width" class="seg" role="group" aria-label="Window in days"></div>
+
+    <p class="label">How</p>
+    <div id="mode" class="seg" role="group" aria-label="Observer">
+      <button type="button" data-mode="STATE">STATE</button>
+      <button type="button" data-mode="TRAJECTORY">TRAJECTORY</button>
+    </div>
+    <p id="mode-hint" class="hint"></p>
+
+    <p class="label">What</p>
+    <div id="chips" class="chips"></div>
+    <p class="chip-key">● on · ○ off (tap) · – absent (no data for this window)</p>
+    <div id="absent-why" class="chip-key" style="margin-top:4px"></div>
+  </section>
+
+  <p id="status" class="status" aria-live="polite">Loading the archive…</p>
+
+  <section id="replay" class="card" aria-label="Replay">
+    <p class="label">Replay</p>
+    <div id="picker" class="seg" role="group" aria-label="Choose a similar past" style="margin-bottom:10px"></div>
+    <div id="legend" class="legend"></div>
+    <div class="chart-wrap">
+      <svg id="chart" viewBox="0 0 360 230" role="img" tabindex="0" aria-label="Price change around the event day"></svg>
+      <div id="tip" class="tip" aria-hidden="true"></div>
+    </div>
+    <table id="table" aria-label="Replay checkpoints"></table>
+    <div id="why-wrap">
+      <p class="label" style="margin-top:14px">Why it matched</p>
+      <div id="why" class="why"></div>
+    </div>
+  </section>
+
+  <section class="card" aria-label="Similar pasts">
+    <p class="label">Similar pasts</p>
+    <div id="results" class="results"></div>
+    <details>
+      <summary>How RE: measures “similar”</summary>
+      <p><strong>STATE</strong> puts each axis on a 0–1 scale: where it stood within its own past year, using only data up to that day. Price, market cap, volatility and the change figures use the past-year range; volume is compared on a log scale; Fear &amp; Greed is its 0–100 value. With less than 30 days of past an axis is absent; with less than a year, the number of days used is shown next to the result.</p>
+      <p><strong>TRAJECTORY</strong> compares how things moved inside the window, from its first day: price as % change, volume against the window's median (log), volatility as is, Fear &amp; Greed as points gained or lost. Each axis has a fixed scale, so a match does not depend on which other windows were searched.</p>
+      <p><strong>Strict time</strong>: a past only counts if its 30-day replay had already happened by D. D's own future stays hidden.</p>
+      <p>Only axes present on both sides are compared; their weights are shared out again. RE: shows what followed similar pasts. It is not a forecast and not investment advice.</p>
+    </details>
+  </section>
+
+  <footer id="footer">Data: CoinMarketCap API (quotes, OHLCV and Fear &amp; Greed history), kept in RE:'s own archive.</footer>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
