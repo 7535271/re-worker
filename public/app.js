@@ -176,7 +176,11 @@ function setupControls() {
   }
   $("look").addEventListener("click", () => go({ view: "day", open: null }));
   $("how-link").addEventListener("click", () => go({ view: "how", open: null }));
-  for (const b of document.querySelectorAll(".back")) b.addEventListener("click", back);
+  // the header gets a hairline once the page scrolls under it
+  const top = document.querySelector(".topline");
+  const onScroll = () => top.classList.toggle("scrolled", window.scrollY > 4);
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
   $("p-prev").addEventListener("click", () => go({ sel: S.sel - 1, open: null }, false));
   $("p-next").addEventListener("click", () => go({ sel: S.sel + 1, open: null }, false));
   $("stand").addEventListener("click", standHere);
@@ -208,10 +212,6 @@ function go(patch, push = true) {
   Object.assign(S, patch);
   render();
   writeHash(push);
-}
-function back() {
-  if (history.state && history.state.re && history.length > 1 && S.view !== "home") history.back();
-  else go({ view: "home", open: null }, false);
 }
 function setDay(d) {
   S.day = d < ex.first ? ex.first : d > ex.last ? ex.last : d;
