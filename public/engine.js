@@ -349,6 +349,29 @@ export function search(tl, st, opts) {
     if (picked.length >= top) break;
   }
 
+  // 過去から5つそろわないとき（倉庫の最初のころ）だけ、D より後の日で埋める（2026-09-27、しゅう：B 案）。
+  // 後の日は「later」の印つき。D の「その後30日」とリプレイが重ならないように、
+  // 候補のリプレイの始まり（−max(w,7) 日）が D + HORIZON より後の日だけを見る。候補自身の30日後も倉庫にあること
+  let laterSearched = 0;
+  if (opts.fillLater !== false && picked.length < top) {
+    const scoredL = [];
+    const firstLater = q + H + Math.max(w, 7);
+    for (let c = Math.max(firstLater, w - 1); c <= tl.n - 1 - H; c++) {
+      laterSearched++;
+      const r = mode === "TRAJECTORY"
+        ? trajDistance(qTraj, tl, c, w, axes, weights, buf)
+        : stateDistance(st, q, c, w, axes, weights);
+      if (!r || r.sw + 1e-9 < MIN_WEIGHT_SHARE * totalWeight) continue;
+      scoredL.push({ c, d: r.d, used: r.used, later: true });
+    }
+    scoredL.sort((a, b) => a.d - b.d || a.c - b.c);
+    for (const s of scoredL) {
+      if (picked.some((p) => Math.abs(p.c - s.c) < gap)) continue;
+      picked.push(s);
+      if (picked.length >= top) break;
+    }
+  }
+
   const results = picked.map((p) => {
     const usedAxes = Object.keys(p.used);
     const out = {
@@ -356,6 +379,7 @@ export function search(tl, st, opts) {
       index: p.c,
       window: [dayAt(tl, p.c - w + 1), dayAt(tl, p.c)],
       similarity: Math.round((1 - p.d) * 1000) / 1000,
+      later: !!p.later,
       axes: Object.fromEntries(usedAxes.map((k) => [k, Math.round((1 - p.used[k]) * 1000) / 1000])),
     };
     if (mode === "STATE") {
@@ -363,7 +387,7 @@ export function search(tl, st, opts) {
     }
     return out;
   });
-  return { ...base, searched, excluded, candidates: scored.length, results };
+  return { ...base, searched, excluded, candidates: scored.length, later_searched: laterSearched, later_filled: results.filter((r) => r.later).length, results };
 }
 
 /* ── リプレイ：出来事の日（i）を 0 として、−7d … +30d に何が起きたか ──

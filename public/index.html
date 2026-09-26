@@ -371,6 +371,7 @@
   .row .chev { color: var(--axis); font-size: 20px; line-height: 1; }
   .row .hist { grid-column: 1 / 3; }
   .rows .empty { padding: 16px; font-size: 13px; color: var(--muted); }
+  .rows .divider { padding: 10px 16px 8px; border-top: 1px solid var(--grid); background: var(--wash); font-size: 12px; font-weight: 600; color: var(--ink-2); }
   .hist { font-size: 12px; color: var(--muted); }
   .row-link { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: 12px; padding: 15px 16px; border: 0; border-radius: 16px; background: var(--surface); box-shadow: 0 0 0 1px var(--ring); font: inherit; font-size: 15px; font-weight: 650; color: var(--ink); cursor: pointer; }
   .row-link span { color: var(--axis); font-size: 20px; line-height: 1; }
@@ -587,6 +588,7 @@
       <p><strong>Where it stood</strong> (STATE) puts each axis on a 0–1 scale: where it stood within its own past year, using only data up to that day. Price, market cap, volatility and the change figures use the past-year range; volume is compared on a log scale; Fear &amp; Greed is its 0–100 value. With less than 30 days of past an axis is absent.</p>
       <p><strong>How it moved</strong> (TRAJECTORY) compares how things moved inside the window, from its first day: price as % change, volume against the window's median (log), volatility as is, Fear &amp; Greed as points gained or lost. Each axis has a fixed scale, so a match does not depend on which other windows were searched.</p>
       <p><strong>Strict time</strong>: a past day only counts if its next 30 days had already happened by D. D's own future stays hidden.</p>
+      <p><strong>Later in history</strong>: near the start of the archive there may be fewer than five such days. Only then, RE: fills the list with days from after D, marked “later in history”. Their replays start after D's own next 30 days, so D's future still stays hidden; what they show is hindsight.</p>
       <p><strong>Spacing</strong>: the look-alike days are at least 30 days apart, so one long stretch of the market is not shown five times. If several still come from the same season, that stretch really did last.</p>
       <p><strong>Short and incomplete history</strong>: a day in the archive's first year has less than a year behind it (short history); a later day can have gaps in its past year (incomplete history). Both stay in the list, marked with how many days were there to compare.</p>
       <p>Only axes present on both sides are compared; their weights are shared out again. A past day is compared only if at least half of D's axes (by weight) can be compared there — the ones left out are counted, not hidden.</p>

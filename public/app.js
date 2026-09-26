@@ -321,19 +321,28 @@ function renderHome() {
     box.append(el("p", { class: "empty" }, res.searched ? "Every past day was left out: none had at least half of this day's axes to compare." : "There is no earlier day to compare with yet."));
     return;
   }
-  $("found").textContent = `${res.results.length} of ${int(res.candidates)} days before it`;
+  const nLater = res.results.filter((r) => r.later).length;
+  $("found").textContent = nLater
+    ? `${res.results.length - nLater} from before it · ${nLater} later in history (its past is short)`
+    : `${res.results.length} of ${int(res.candidates)} days before it`;
   res.results.forEach((r, i) => {
+    if (r.later && (i === 0 || !res.results[i - 1].later)) {
+      box.append(el("div", { class: "divider" }, "Later in history — shown because the past before this day is short"));
+    }
     const b = el("button", { type: "button", class: "row", style: `animation-delay:${i * 0.04}s`, "aria-label": `${r.day}, ${r.similarity.toFixed(2)} alike` });
     const [ry] = ymdParts(r.day);
     const when = el("span", { class: "when" });
     when.append(el("small", {}, String(ry)), document.createTextNode(niceDay(r.day).slice(7)));
     b.append(when, el("span", { class: "go" }, `${Math.round(r.similarity * 100)}%`), el("span", { class: "chev", "aria-hidden": "true" }, "›"));
-    const tag = histTag(r.coverage_days && r.coverage_days.candidate, r.day);
+    const tag = [r.later ? "later in history" : null, histTag(r.coverage_days && r.coverage_days.candidate, r.day)].filter(Boolean).join(" · ");
     if (tag) b.append(el("span", { class: "hist" }, tag));
     b.addEventListener("click", () => go({ view: "past", sel: i, open: null }));
     box.append(b);
   });
 }
+
+/* a later day (filled in when the past is short) is after D: its replay is hindsight, so it may run to the archive's end */
+const limitFor = (r) => (r && r.later ? ex.last : S.day);
 
 /* ── 2. inside a day that looked like it: ③ was it really alike? ④ what happened next? ⑤ stand on it ── */
 const revealed = new Set(); // "D|that day" pairs whose "next" has been opened in this visit
@@ -341,7 +350,9 @@ function renderPast() {
   const r = res.results[S.sel];
   renderTrail($("trail-past"), r.day);
   $("p-title").textContent = niceDay(r.day);
-  $("p-sub").textContent = `The market says this day felt like ${S.day}.`;
+  $("p-sub").textContent = r.later
+    ? `Later in history. The market says this day felt like ${S.day}.`
+    : `The market says this day felt like ${S.day}.`;
   $("p-hist").textContent = histTag(r.coverage_days && r.coverage_days.candidate, r.day) || "";
   $("p-prev").disabled = S.sel <= 0;
   $("p-next").disabled = S.sel >= res.results.length - 1;
@@ -351,7 +362,9 @@ function renderPast() {
   // ④ stays sealed until it is opened
   const open = revealed.has(`${S.day}|${r.day}`);
   $("open-next").hidden = open;
-  $("seal-note").textContent = `the 30 days after ${r.day} — the part nobody on ${S.day} could see for their own day`;
+  $("seal-note").textContent = r.later
+    ? `the 30 days after ${r.day} — later than your day, so this is hindsight`
+    : `the 30 days after ${r.day} — the part nobody on ${S.day} could see for their own day`;
   $("next-body").hidden = !open;
   if (open) drawNext(r, false);
   $("stand").textContent = `Stand on ${r.day}`;
@@ -367,7 +380,7 @@ function openNext() {
 }
 function drawNext(r, animate) {
   const D = ex.replay(S.day, S.day);
-  const selRep = ex.replay(r.day, S.day);
+  const selRep = ex.replay(r.day, limitFor(r));
   const checks = $("checks");
   checks.textContent = "";
   for (const o of [1, 7, HORIZON]) {
@@ -377,7 +390,7 @@ function drawNext(r, animate) {
     checks.append(c);
   }
   const series = [];
-  res.results.forEach((x, i) => { if (i !== S.sel) series.push({ kind: "context", name: `${i + 1}. ${x.day}`, rep: ex.replay(x.day, S.day) }); });
+  res.results.forEach((x, i) => { if (i !== S.sel) series.push({ kind: "context", name: `${i + 1}. ${x.day}`, rep: ex.replay(x.day, limitFor(x)) }); });
   series.push({ kind: "d", name: `D · ${S.day}`, rep: D });
   series.push({ kind: "sel", name: `${S.sel + 1}. ${r.day}`, rep: selRep });
   view = { series, lo: REPLAY_OFFSETS[0], hi: REPLAY_OFFSETS[REPLAY_OFFSETS.length - 1], cursor: null, animate };
@@ -388,7 +401,7 @@ function drawNext(r, animate) {
   if (res.results.length > 1) lg.append(key("--context", "the other similar days"));
   drawChart();
   view.animate = false;
-  $("p-hidden").textContent = `After ${S.day} the line stops: on that day, nobody knew what came next.`;
+  $("p-hidden").textContent = `After ${S.day} the line stops: on that day, nobody knew what came next.` + (r.later ? ` ${r.day} is later in history, so everything shown for it happened after your day.` : "");
 }
 
 /* ③ both days through the same windows, each as it looked at its own 00:00 UTC. RE: does not grade them */
@@ -826,9 +839,10 @@ function renderHow() {
   else if (!res.searched) det.append(textWithDates("div", {}, `No past window ended by ${res.strict.last_candidate_end} (D − ${HORIZON} days). The archive starts on ${ex.first}; a past only counts if its ${HORIZON}-day replay had already happened on D.`));
   else det.append(textWithDates("div", {}, `D = ${S.day}. Searched ${int(res.searched)} past windows that ended by ${res.strict.last_candidate_end} (D − ${HORIZON} days), so each replay had already happened on D.`));
   if (res.excluded) det.append(textWithDates("div", {}, `${int(res.candidates)} compared · ${int(res.excluded)} left out: less than half of D's axes (by weight) could be compared there.`));
+  if (res.later_filled) det.append(textWithDates("div", {}, `Fewer than five days before D could be found, so ${res.later_filled} later day${res.later_filled === 1 ? " was" : "s were"} added (marked "later in history"). Their replays start after D's own next ${HORIZON} days, so D's future stays hidden.`));
   if (meta.complete === false && meta.missing_years && meta.missing_years.length) det.append(textWithDates("div", { class: "note" }, `The archive is still filling (missing: ${meta.missing_years.join(", ")}). Results use what is stored so far.`));
   const r = res.results[S.sel] || null;
-  renderTable(ex.replay(S.day, S.day), r ? ex.replay(r.day, S.day) : null, r);
+  renderTable(ex.replay(S.day, S.day), r ? ex.replay(r.day, limitFor(r)) : null, r);
   renderWhy(r);
   renderCompare();
   const times = $("times");
@@ -1067,7 +1081,7 @@ function drawCompare(ready, why, loading) {
   res.results.forEach((r, i) => {
     const b = el("button", { type: "button", class: "cmp-row", role: "row", "aria-pressed": String(i === S.sel), "aria-label": `Similar past ${i + 1}, ${r.day}` });
     const wk = el("span", { class: "who" });
-    wk.append(el("i", { class: "k", style: `background:var(${i === S.sel ? "--series-sel" : "--context"})` }), el("b", {}, `Past ${i + 1}`), el("small", {}, r.day));
+    wk.append(el("i", { class: "k", style: `background:var(${i === S.sel ? "--series-sel" : "--context"})` }), el("b", {}, `${r.later ? "Later" : "Past"} ${i + 1}`), el("small", {}, r.day));
     b.append(wk, cmpCell(r.similarity.toFixed(2), null, r.similarity));
     for (const x of CMP_WINDOWS) {
       const W = ready[x.k];
