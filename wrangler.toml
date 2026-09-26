@@ -1,3 +1,16 @@
 name = "re-worker"
 main = "src/worker.js"
 compatibility_date = "2026-01-01"
+
+# 画面（静的ファイル）。/ は public/index.html。ファイルが無いパス（/series など）は worker.js が答える
+[assets]
+directory = "./public"
+
+# 観測の倉庫（Workers KV）
+[[kv_namespaces]]
+binding = "RE_CACHE"
+id = "6dc7b105150f44e18225455c06f57a14"
+
+# 毎時 5分と35分：F&G の観測ログ → 倉庫の補充・直近の取り直し
+[triggers]
+crons = ["5,35 * * * *"]
