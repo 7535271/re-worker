@@ -1292,9 +1292,27 @@ async function probeHn() {
      （D に立ったとき D 自身の景色を見せるかどうかは、画面の側で決める）
    ・窓ごとに時代がある。窓が開く前の日は ABSENT（理由つき）。取れなかった窓も ABSENT（0 にしない）
    ・過去の日の景色は変わらないので、倉庫（KV）にしまって使い回す
+   ・窓ごとの「時間の性質」（ノヴァの3つ：観測・公開・改訂）は WINDOW_TIME にまとめて、返事の先頭に付ける
    ────────────────────────────────────────── */
-const SCENE_V = "v1";
-const WINDOW_FROM = { wikipedia: "2015-07-01", hacker_news: "2006-10-09", apod: "1995-06-16", fx: "1999-01-04" };
+const SCENE_V = "v2";
+const WINDOW_FROM = { wikipedia: "2015-07-01", hacker_news: "2006-10-09", apod: "1995-06-16", fx: "1999-01-04", bitcoin_network: "2009-01-03", weather: "1940-01-01" };
+
+/* 窓の時間の性質（ノヴァの4つの時間：起きた → 見えた → 公開された → 書き換わった）
+   ・as_of_lag = D 00:00 UTC に立ったとき、その窓で「公開済み」だった一番新しい日は D − 何日か。
+     まだ測っていない窓は安全側（2日）。/probe/published で実測中
+   ・value_status = 見せている値の状態。as_published（公開されたまま変わらない）／current（今も変わり続けていて、今の値を見せる）
+     ／revised（あとから書き換わる。今の値を見せる）。AS OF の画面でも、値そのものはこの状態のまま（ノヴァの二軸） */
+const WINDOW_TIME = {
+  wikipedia_en: { event: "people reading during the UTC day", observation: "counted by Wikimedia as it happens", publication: "about a day after the day ends (being measured: /probe/published)", revision: "none known", value_status: "as_published", as_of_lag: 2 },
+  wikipedia_ja: { event: "people reading during the UTC day", observation: "counted by Wikimedia as it happens", publication: "about a day after the day ends (being measured: /probe/published)", revision: "none known", value_status: "as_published", as_of_lag: 2 },
+  hacker_news: { event: "stories posted during the UTC day", observation: "public as soon as posted", publication: "as they are posted", revision: "points and comments keep changing; RE: can only read today's values", value_status: "current", as_of_lag: 1 },
+  apod: { event: "the picture chosen for that date", observation: "public on that date", publication: "on that date, US Eastern time (before 00:00 UTC of the next day)", revision: "none known", value_status: "as_published", as_of_lag: 1 },
+  earthquakes: { event: "earthquakes during the UTC day", observation: "detected within minutes", publication: "within about an hour of each event", revision: "magnitudes and locations are revised, sometimes years later; RE: can only read today's values", value_status: "revised", as_of_lag: 1 },
+  fx: { event: "the ECB reference rate of a business day", observation: "set once that day", publication: "that day, about 16:00 CET", revision: "none known", value_status: "as_published", as_of_lag: 1 },
+  bitcoin_network: { event: "blocks and transactions during the UTC day", observation: "public on the chain as it happens", publication: "daily chart values from Blockchain.com; when a day appears is being measured (/probe/published)", revision: "not known; hash rate is an estimate from block timing", value_status: "current", as_of_lag: 2 },
+  weather: { event: "the weather during the UTC day at one place", observation: "felt and measured there as it happens", publication: "Open-Meteo Best Match: ECMWF IFS every 6 hours without delay (2017 on), ERA5 about 5 days later (1940 on); being measured: /probe/published", revision: "recent values can change when ERA5 arrives; days before 2017 are a reconstruction made years later", value_status: "revised", as_of_lag: 2 },
+  x: { event: "posts during the UTC day", observation: "public as soon as posted", publication: "as they are posted", revision: "posts can be deleted or edited later", value_status: "current", as_of_lag: 1 },
+};
 const WIKI_SKIP = /^(Main_Page|Special:|Wikipedia:|User:|User_talk:|Portal:|File:|Help:|Template:|Category:|Talk:|Draft:|MediaWiki:|Module:|メインページ$|特別:|利用者:|ファイル:|ヘルプ:|ノート:|ポータル:|プロジェクト:|-$)/;
 
 function absent(reason) { return { state: "absent", reason }; }
@@ -1383,6 +1401,77 @@ async function sceneFx(day) {
   };
 }
 
+/* ⛏️ Bitcoin ネットワーク（Blockchain.com）
+   取引数はその日の値と7日前（同じ曜日）との比較。ハッシュレートは1日ごとだとブロックの出方でぶれるので、
+   7日平均（その日まで）と、その前の7日平均との比較で見せる */
+async function sceneChain(day) {
+  if (day < WINDOW_FROM.bitcoin_network) return absent(`this window opens on ${WINDOW_FROM.bitcoin_network}`);
+  const from = shiftDay(day, -13);
+  const q = (chart) => `${CHAIN}/${chart}?start=${from}&timespan=14days&format=json&sampled=false`;
+  const [tx, hr] = await Promise.all([look(q("n-transactions"), { timeoutMs: 8000 }), look(q("hash-rate"), { timeoutMs: 8000 })]);
+  const at = (r) => {
+    const v = r.response.body && Array.isArray(r.response.body.values) ? r.response.body.values : null;
+    if (!v) return null;
+    const m = new Map();
+    for (const p of v) if (p && typeof p.x === "number" && typeof p.y === "number") m.set(ymdOf(Math.floor(p.x / 86400)), p.y);
+    return m;
+  };
+  const tm = at(tx), hm = at(hr);
+  if (!tm && !hm) return failed(tx);
+  const recent = day >= shiftDay(dayKey(iso(nowMs())), -1);
+  const missing = (m) => (!m ? "could not be read this time" : recent ? "not published yet" : "the chart has no value for this day");
+  // 取引数：その日と7日前
+  const tv = tm && tm.has(day) ? tm.get(day) : null;
+  const tb = tm && tm.has(shiftDay(day, -7)) ? tm.get(shiftDay(day, -7)) : null;
+  // ハッシュレート：7日平均（5日以上そろっているときだけ）
+  const avg = (endDay) => {
+    if (!hm) return null;
+    let sum = 0, n = 0;
+    for (let i = 0; i < 7; i++) { const d = shiftDay(endDay, -i); if (hm.has(d)) { sum += hm.get(d); n++; } }
+    return n >= 5 ? sum / n : null;
+  };
+  const hv = hm && hm.has(day) ? avg(day) : null;
+  const hb = avg(shiftDay(day, -7));
+  if (tv === null && hv === null) return absent(missing(tm || hm));
+  return {
+    state: "on", source: "Blockchain.com charts (n-transactions, hash-rate)",
+    transactions: tv, transactions_change_7d: tv !== null && tb ? tv / tb - 1 : null, transactions_why: tv === null ? missing(tm) : null,
+    hash_rate_avg7_th_s: hv, hash_rate_avg7_change: hv !== null && hb ? hv / hb - 1 : null, hash_rate_why: hv === null ? missing(hm) : null,
+  };
+}
+
+/* ☁️ 天気（Open-Meteo）：場所はまだ決まっていないので、?lat=&lon=&place= を渡されたときだけ開く */
+const WMO = [[0, "clear"], [3, "partly cloudy"], [48, "fog"], [57, "drizzle"], [67, "rain"], [77, "snow"], [82, "rain showers"], [86, "snow showers"], [99, "thunderstorm"]];
+function wmoText(c) {
+  if (typeof c !== "number") return null;
+  if (c === 0) return "clear";
+  if (c <= 3) return c === 3 ? "overcast" : "partly cloudy";
+  for (const [max, t] of WMO) if (c <= max) return t;
+  return null;
+}
+function placeOf(url) {
+  const lat = Number(url.searchParams.get("lat")), lon = Number(url.searchParams.get("lon"));
+  if (!url.searchParams.has("lat") || !url.searchParams.has("lon")) return null;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return { bad: true };
+  const name = (url.searchParams.get("place") || "").replace(/[^\p{L}\p{N} ,.'()-]/gu, "").slice(0, 60) || `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
+  return { lat: Math.round(lat * 100) / 100, lon: Math.round(lon * 100) / 100, name };
+}
+async function sceneWeather(day, place) {
+  if (day < WINDOW_FROM.weather) return absent(`this window opens on ${WINDOW_FROM.weather}`);
+  const daily = "temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,weather_code";
+  const r = await look(`${OPEN_METEO}?${new URLSearchParams({ latitude: String(place.lat), longitude: String(place.lon), start_date: day, end_date: day, daily, timezone: "UTC" })}`, { timeoutMs: 8000 });
+  const d = r.response.body && r.response.body.daily;
+  if (!d || !Array.isArray(d.time)) return absent(`could not be read this time: ${String(errOf(r) || "HTTP " + r.response.http_status).slice(0, 160)}`);
+  const i = d.time.indexOf(day);
+  const val = (k) => (i >= 0 && d[k] && d[k][i] !== undefined ? d[k][i] : null);
+  if (i < 0 || val("temperature_2m_max") === null) return absent("no value for this day yet");
+  return {
+    state: "on", source: "Open-Meteo historical weather (UTC day)", place: place.name, lat: place.lat, lon: place.lon,
+    temp_max_c: val("temperature_2m_max"), temp_min_c: val("temperature_2m_min"), precipitation_mm: val("precipitation_sum"),
+    wind_max_kmh: val("wind_speed_10m_max"), weather_code: val("weather_code"), weather: wmoText(val("weather_code")),
+  };
+}
+
 function sceneX(day) {
   const q = `bitcoin since:${day} until:${shiftDay(day, 1)}`;
   return {
@@ -1398,38 +1487,113 @@ async function scene(env, url) {
   if (!isDay(day) || day > today) {
     return out({ error: "bad parameters", problems: ["day is required as YYYY-MM-DD, not after today"], example: "/scene?day=2020-03-12" }, 400);
   }
+  const place = placeOf(url);
+  if (place && place.bad) return out({ error: "bad parameters", problems: ["lat must be −90…90 and lon −180…180"], example: "/scene?day=2020-03-12&lat=35.68&lon=139.69&place=Tokyo" }, 400);
   const ns = env.RE_CACHE || null;
   const key = `scene:${SCENE_V}:${day}`;
+  // 返事の先頭に窓の時間の性質を付ける（しまってある景色の文字列はそのまま使う）
+  const reply = async (text, how) => {
+    let body = text;
+    if (place) {
+      const o = JSON.parse(text);
+      o.windows.weather = await sceneWeather(day, place);
+      body = JSON.stringify(o);
+    }
+    return new Response(`{"window_time":${JSON.stringify(WINDOW_TIME)},` + body.slice(1), { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-RE-Scene": how, ...CORS } });
+  };
   if (ns && url.searchParams.get("fresh") !== "1") {
     const hit = await ns.get(key);
-    if (hit) return new Response(hit, { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-RE-Scene": "archive", ...CORS } });
+    if (hit) return reply(hit, "archive");
   }
-  const [wen, wja, hn, apod, quakes, fx] = await Promise.all([
-    sceneWikipedia(day, "en"), sceneWikipedia(day, "ja"), sceneHackerNews(day), sceneApod(day), sceneQuakes(day), sceneFx(day),
+  const [wen, wja, hn, apod, quakes, fx, chain] = await Promise.all([
+    sceneWikipedia(day, "en"), sceneWikipedia(day, "ja"), sceneHackerNews(day), sceneApod(day), sceneQuakes(day), sceneFx(day), sceneChain(day),
   ]);
-  const windows = { wikipedia_en: wen, wikipedia_ja: wja, hacker_news: hn, apod, earthquakes: quakes, fx, x: sceneX(day) };
+  const windows = { wikipedia_en: wen, wikipedia_ja: wja, hacker_news: hn, apod, earthquakes: quakes, fx, bitcoin_network: chain, x: sceneX(day) };
   const body = {
     day,
     generated_at: iso(nowMs()),
-    time_note: "Each window describes the day itself. Most of it was only known after the day ended, so on day D itself it was not yet visible.",
+    time_note: "HINDSIGHT: every window here describes this day itself, as its source reports it now. Most of it was published only after the day ended. For what was visible at 00:00 UTC on a day D, take each window from D − window_time[w].as_of_lag (AS OF).",
     windows,
   };
   const text = JSON.stringify(body);
   if (ns) {
     // 全部そろった過去の日（2日以上前）はずっとしまう。欠けがある日や最近の日は1時間だけ
-    const complete = Object.values(windows).every((w) => w.state !== "absent" || /opens on|no picture page/.test(w.reason || ""));
-    const settled = day <= shiftDay(today, -2);
+    const complete = Object.values(windows).every((w) => w.state !== "absent" || /opens on|no picture page|has no value for this day/.test(w.reason || ""));
+    const settled = day <= shiftDay(today, -3);
     try {
       await ns.put(key, text, complete && settled ? {} : { expirationTtl: 3600 });
     } catch (e) { console.error("scene cache", e); }
   }
-  return new Response(text, { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-RE-Scene": "fresh", ...CORS } });
+  return reply(text, "fresh");
+}
+
+/* ──────────────────────────────────────────
+   いつ公開されたか（/probe/published）
+   「D 00:00 に D−1 の分はもう出ていたか」を測る。cron のたびに、昨日（UTC）の分が出たかを見て、
+   初めて見えた時刻を記録する。F&G の fng-timing と同じ考え方。書き込むのは何か新しく分かったときだけ
+   ────────────────────────────────────────── */
+const PUB_KEY = "published:v1";
+const PUB_KEEP_DAYS = 21;
+const PUB_SOURCES = {
+  wikipedia_top: (y) => `${WIKI}/top/en.wikipedia/all-access/${y.replace(/-/g, "/")}`,
+  wikipedia_article: (y) => `${WIKI}/per-article/en.wikipedia/all-access/user/Bitcoin/daily/${ymdCompact(y)}00/${ymdCompact(y)}00`,
+  bitcoin_network: (y) => `${CHAIN}/n-transactions?start=${shiftDay(y, -1)}&timespan=3days&format=json&sampled=false`,
+  weather: (y) => `${OPEN_METEO}?${new URLSearchParams({ latitude: "35.68", longitude: "139.69", start_date: y, end_date: y, daily: "temperature_2m_max", timezone: "UTC" })}`,
+};
+async function isPublished(name, y) {
+  const url = PUB_SOURCES[name](y);
+  if (name === "wikipedia_top") {
+    const r = await fetchText(url, 8000);
+    return r.ok && r.text.includes('"articles"');
+  }
+  const r = await look(url, { timeoutMs: 8000 });
+  const b = r.response.body;
+  if (name === "wikipedia_article") return !!(b && Array.isArray(b.items) && b.items.length);
+  if (name === "weather") return !!(b && b.daily && Array.isArray(b.daily.temperature_2m_max) && b.daily.temperature_2m_max[0] !== null && b.daily.temperature_2m_max[0] !== undefined);
+  const t0 = dayNum(y) * 86400;
+  return !!(b && Array.isArray(b.values) && b.values.some((p) => p && p.x === t0));
+}
+async function observePublication(env, nowAt = nowMs()) {
+  const ns = env.RE_CACHE;
+  const y = shiftDay(dayKey(iso(nowAt)), -1);
+  const log = (await kvJson(ns, PUB_KEY)) || { days: {} };
+  const rec = log.days[y] || (log.days[y] = { first_checked: iso(nowAt), seen: {} });
+  let changed = !log.days[y].checks;
+  rec.checks = (rec.checks || 0) + 1;
+  const todo = Object.keys(PUB_SOURCES).filter((n) => !rec.seen[n]);
+  const got = await Promise.all(todo.map((n) => isPublished(n, y).catch(() => false)));
+  todo.forEach((n, i) => { if (got[i]) { rec.seen[n] = iso(nowAt); changed = true; } });
+  // 古い日は捨てる
+  for (const d of Object.keys(log.days)) if (d < shiftDay(y, -PUB_KEEP_DAYS)) { delete log.days[d]; changed = true; }
+  // 数えるだけの更新（checks）は、何か分かったときに一緒に書く（書き込み回数を増やさない）
+  if (changed) await ns.put(PUB_KEY, JSON.stringify(log));
+  return { day: y, checked: todo, newly_seen: todo.filter((_, i) => got[i]) };
+}
+function analyzePublication(log) {
+  const days = log && log.days ? Object.keys(log.days).sort().reverse() : [];
+  const rows = days.map((d) => {
+    const r = log.days[d];
+    const end = Date.parse(shiftDay(d, 1) + "T00:00:00Z");
+    const after = (t) => (t ? Math.round((Date.parse(t) - end) / 60000) : null);
+    const seen = {};
+    for (const n of Object.keys(PUB_SOURCES)) {
+      const t = r.seen[n] || null;
+      seen[n] = t ? { first_seen: t, minutes_after_day_end: after(t) } : { first_seen: null, minutes_after_day_end: null };
+    }
+    return { day: d, first_checked: r.first_checked, first_checked_minutes_after_day_end: after(r.first_checked), seen };
+  });
+  return {
+    question: "Was day D − 1 already published at D 00:00 UTC? For each source, the first time RE: saw yesterday's value (checked twice an hour, at :05 and :35). Weather is checked at one point (Tokyo) as a sample.",
+    how_to_read: "minutes_after_day_end = when it was first seen, counted from the end of that day (00:00 UTC of the next day). If it equals first_checked_minutes_after_day_end, it was already there at the first look, so it was published earlier than that.",
+    days: rows,
+  };
 }
 
 /* cron: 毎時 5分・35分。F&G の観測 → 倉庫の1歩 */
 async function runCron(env, scheduledTime) {
   if (!env.CMC_KEY || !env.RE_CACHE) return;
   try { await observeFng(env); } catch (e) { console.error("observeFng", e); }
+  try { await observePublication(env, scheduledTime || nowMs()); } catch (e) { console.error("observePublication", e); }
   for (const id of ARCHIVE_IDS) {
     try { await archiveStep(env, id, scheduledTime || nowMs(), "cron"); } catch (e) { console.error("archiveStep", id, e); }
   }
@@ -1457,7 +1621,8 @@ export default {
           endpoints: [
             "/ — the app (public/index.html, public/app.js, public/engine.js)",
             "/series?id=1 — every stored day for the asset, from the archive (no CMC call). Optional &from=2020&to=2024 (years)",
-            "/scene?day=YYYY-MM-DD — the same day through other windows: Wikipedia (en, ja), Hacker News, NASA APOD, earthquakes, ECB rates, and a door to X search",
+            "/scene?day=YYYY-MM-DD — the same day through other windows: Wikipedia (en, ja), Hacker News, NASA APOD, earthquakes, ECB rates, the Bitcoin network, and a door to X search. window_time says, per window, when it is observed, published and revised, and how many days back it was visible at D 00:00 UTC (as_of_lag). Add &lat=&lon=&place= for the weather at one place",
+            "/probe/published — when yesterday's Wikipedia, Bitcoin-network and weather values first appeared (measured by the cron, for the AS OF view)",
             "/archive/status — what the archive holds, what is missing, recent errors",
             "/archive/step — do one unit of archive work now (build one missing year, or refresh the recent days)",
             "/state?id=1&start=YYYY-MM-DD&end=YYYY-MM-DD — MarketState for every day from start to end, live from CMC (start and end are required, both inclusive)",
@@ -1493,8 +1658,9 @@ export default {
       if (p === "/probe/hn") return out(await probeHn());
 
       /* ── 倉庫だけで答えるもの（CMC を叩かない）── */
-      if (p === "/series" || p === "/archive/status" || p === "/probe/fng-timing") {
+      if (p === "/series" || p === "/archive/status" || p === "/probe/fng-timing" || p === "/probe/published") {
         if (!env.RE_CACHE) return out(noStorage(), 503);
+        if (p === "/probe/published") return out(analyzePublication(await kvJson(env.RE_CACHE, PUB_KEY)));
         if (p === "/series") return await series(env, url);
         if (p === "/archive/status") return out(await archiveStatus(env));
         return out(analyzeTiming(await kvJson(env.RE_CACHE, TIMING_KEY)));
