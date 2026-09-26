@@ -1081,14 +1081,15 @@ function gdeltTimeline(r) {
 }
 function gdeltIso(d) { const s = String(d || ""); return s.length >= 15 ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T${s.slice(9, 11)}:${s.slice(11, 13)}:${s.slice(13, 15)}Z` : s; }
 
-async function probeGdelt() {
+async function probeGdelt(only) {
   const q = (params) => `${GDELT}?${new URLSearchParams({ query: "bitcoin", mode: "timelinevolraw", format: "json", ...params })}`;
-  const calls = [
+  let calls = [
     ["before_2017", q({ startdatetime: "20161201000000", enddatetime: "20161231235959" })],
     ["2017_01", q({ startdatetime: "20170101000000", enddatetime: "20170131235959" })],
     ["2020_03", q({ startdatetime: "20200301000000", enddatetime: "20200331235959" })],
     ["last_7_days", q({ timespan: "7d" })],
   ];
+  if (only) calls = calls.filter((c) => c[0] === only); // ?only=2020_03 などで1回だけ（待ち時間なし）
   const out = [];
   for (let i = 0; i < calls.length; i++) {
     if (i) await wait(5500); // GDELT は 5 秒に 1 回まで（待っている時間は CPU に数えない）
@@ -1104,6 +1105,181 @@ async function probeGdelt() {
     ],
     calls: out.map((o) => ({ name: o.name, request: o.request, response: o.response })),
   };
+}
+
+/* ── ノヴァの地図にある窓（2026-09-26）。どれもキー不要か、お試しキー ── */
+const OPEN_METEO = "https://archive-api.open-meteo.com/v1/archive";
+const USGS = "https://earthquake.usgs.gov/fdsnws/event/1";
+const FRANKFURTER = "https://api.frankfurter.dev/v1";
+const FRANKFURTER_OLD = "https://api.frankfurter.app";
+const CHAIN = "https://api.blockchain.info/charts";
+const APOD = "https://api.nasa.gov/planetary/apod";
+const HN = "https://hn.algolia.com/api/v1";
+
+const callOut = (name, r) => ({ name, request: r.request, response: { http_status: r.response.http_status, ms: r.response.ms, headers: r.response.headers, text: r.response.text } });
+async function runCalls(calls, summarize) {
+  const keys = Object.keys(calls);
+  const res = await Promise.all(keys.map((k) => look(calls[k])));
+  const _summary = {};
+  keys.forEach((k, i) => { _summary[k] = summarize(res[i], k); });
+  return { _summary, calls: keys.map((k, i) => callOut(k, res[i])) };
+}
+const errOf = (r) => {
+  const b = r.response.body;
+  if (b && typeof b === "object") {
+    // 文章になっている理由を先に採る（Open-Meteo は error: true と reason: "…" を別々に返す）
+    for (const k of ["reason", "msg", "message", "detail", "title", "error"]) {
+      const e = b[k];
+      if (typeof e === "string" && e) return e.slice(0, 300);
+      if (e && typeof e === "object") return e;
+    }
+  }
+  return r.response.text;
+};
+
+/* ☁️ Open-Meteo：天気。1940年から？ 直近は何日遅れ？ 14年分を1回で取れる？ */
+async function probeWeather() {
+  const today = dayKey(iso(nowMs()));
+  const daily = "temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,weather_code";
+  const q = (s, e) => `${OPEN_METEO}?${new URLSearchParams({ latitude: "35.68", longitude: "139.69", start_date: s, end_date: e, daily, timezone: "UTC" })}`;
+  const r = await runCalls({
+    before_1940: q("1939-12-25", "1940-01-05"),
+    d_2020_03_06_to_12: q("2020-03-06", "2020-03-12"),
+    last_14_days: q(shiftDay(today, -14), today),
+    from_2013_to_today: q("2013-04-28", today),
+  }, (res) => {
+    const b = res.response.body;
+    const d = b && b.daily;
+    if (!d || !Array.isArray(d.time)) return { http_status: res.response.http_status, error: errOf(res) };
+    const vars = Object.keys(d).filter((k) => k !== "time");
+    const perVar = {};
+    for (const v of vars) {
+      const col = d[v] || [];
+      let nulls = 0, lastOn = null;
+      for (let i = 0; i < col.length; i++) { if (col[i] === null || col[i] === undefined) nulls++; else lastOn = d.time[i]; }
+      perVar[v] = { nulls, last_with_value: lastOn };
+    }
+    return {
+      http_status: res.response.http_status,
+      days: d.time.length, first: d.time[0], last: d.time[d.time.length - 1],
+      timezone: b.timezone, utc_offset_seconds: b.utc_offset_seconds, units: b.daily_units,
+      variables: perVar,
+      sample: d.time.slice(0, 3).map((t, i) => Object.fromEntries([["day", t], ...vars.map((v) => [v, d[v][i]])])),
+    };
+  });
+  return { place: "Tokyo (35.68, 139.69) — only to see how the window behaves; the place is still to be decided", ...r };
+}
+
+/* 🌋 USGS：地震。1日の件数と大きい順。後から書き換わるか（updated） */
+async function probeQuakes() {
+  const today = dayKey(iso(nowMs()));
+  const p = (o) => new URLSearchParams({ format: "geojson", minmagnitude: "4.5", ...o });
+  return runCalls({
+    count_2020_03_12: `${USGS}/count?${p({ starttime: "2020-03-12", endtime: "2020-03-13" })}`,
+    biggest_2020_03_12: `${USGS}/query?${p({ starttime: "2020-03-12", endtime: "2020-03-13", orderby: "magnitude", limit: "5" })}`,
+    count_2013: `${USGS}/count?${p({ starttime: "2013-01-01", endtime: "2014-01-01" })}`,
+    latest_since_yesterday: `${USGS}/query?${p({ starttime: shiftDay(today, -1), orderby: "time", limit: "5" })}`,
+  }, (res) => {
+    const b = res.response.body;
+    if (b && typeof b.count === "number" && !b.features) return { http_status: res.response.http_status, count: b.count, maxAllowed: b.maxAllowed };
+    if (!b || !Array.isArray(b.features)) return { http_status: res.response.http_status, error: errOf(res) };
+    return {
+      http_status: res.response.http_status,
+      count: b.metadata ? b.metadata.count : b.features.length,
+      generated: b.metadata && b.metadata.generated ? iso(b.metadata.generated) : null,
+      events: b.features.map((f) => ({
+        mag: f.properties.mag, place: f.properties.place, time: iso(f.properties.time),
+        updated: f.properties.updated ? iso(f.properties.updated) : null, status: f.properties.status, type: f.properties.type,
+      })),
+    };
+  });
+}
+
+/* 💱 ECB の為替（Frankfurter）。1999年から？ 土日の抜け方、最新はいつの値？ */
+async function probeFx() {
+  return runCalls({
+    d_2020_03_06_to_12: `${FRANKFURTER}/2020-03-06..2020-03-12?base=USD&symbols=JPY,EUR`,
+    first_days_1999: `${FRANKFURTER}/1999-01-01..1999-01-08?base=EUR&symbols=USD,JPY`,
+    latest: `${FRANKFURTER}/latest?base=USD&symbols=JPY,EUR`,
+    latest_old_domain: `${FRANKFURTER_OLD}/latest?from=USD&to=JPY`,
+  }, (res) => {
+    const b = res.response.body;
+    if (!b || !b.rates) return { http_status: res.response.http_status, error: errOf(res) };
+    const dated = Object.values(b.rates).some((v) => v && typeof v === "object");
+    return {
+      http_status: res.response.http_status,
+      base: b.base, start_date: b.start_date, end_date: b.end_date, date: b.date,
+      days_listed: dated ? Object.keys(b.rates) : null,
+      rates: dated ? Object.fromEntries(Object.entries(b.rates).slice(0, 7)) : b.rates,
+    };
+  });
+}
+
+/* ⛏️ Blockchain.com：Bitcoin のネットワークそのもの。いつから？ 毎日？ 時刻は 00:00 UTC？ */
+async function probeChain() {
+  return runCalls({
+    n_transactions_all: `${CHAIN}/n-transactions?timespan=all&format=json&sampled=false`,
+    hash_rate_all: `${CHAIN}/hash-rate?timespan=all&format=json&sampled=false`,
+    n_transactions_2020_03: `${CHAIN}/n-transactions?start=2020-03-01&timespan=15days&format=json&sampled=false`,
+  }, (res) => {
+    const b = res.response.body;
+    const v = b && Array.isArray(b.values) ? b.values : null;
+    if (!v) return { http_status: res.response.http_status, error: errOf(res) };
+    const steps = {};
+    let offMidnight = 0;
+    for (let i = 0; i < v.length; i++) {
+      if (v[i].x % 86400 !== 0) offMidnight++;
+      if (i) { const s = Math.round((v[i].x - v[i - 1].x) / 86400); steps[s] = (steps[s] || 0) + 1; }
+    }
+    return {
+      http_status: res.response.http_status,
+      name: b.name, unit: b.unit, period: b.period, description: b.description,
+      points: v.length,
+      first: v.length ? iso(v[0].x * 1000) : null, last: v.length ? iso(v[v.length - 1].x * 1000) : null,
+      step_days: steps, not_at_00_00_utc: offMidnight,
+      first_items: v.slice(0, 3).map((p) => ({ t: iso(p.x * 1000), y: p.y })),
+      last_items: v.slice(-3).map((p) => ({ t: iso(p.x * 1000), y: p.y })),
+    };
+  });
+}
+
+/* 🌌 NASA APOD：その日の宇宙の一枚。1995-06-16 から？ お試しキーの残り回数、著作権の表示 */
+async function probeApod() {
+  return runCalls({
+    d_2020_03_12: `${APOD}?api_key=DEMO_KEY&date=2020-03-12`,
+    first_day_1995_06_16: `${APOD}?api_key=DEMO_KEY&date=1995-06-16`,
+    before_1995_06_15: `${APOD}?api_key=DEMO_KEY&date=1995-06-15`,
+    today: `${APOD}?api_key=DEMO_KEY`,
+  }, (res) => {
+    const b = res.response.body;
+    if (!b || !b.date) return { http_status: res.response.http_status, error: errOf(res), rate_limit_remaining: res.response.headers["x-ratelimit-remaining"] ?? null };
+    return {
+      http_status: res.response.http_status,
+      date: b.date, title: b.title, media_type: b.media_type, copyright: b.copyright ?? null,
+      url: b.url, has_hd: !!b.hdurl, explanation_start: (b.explanation || "").slice(0, 160),
+      rate_limit_remaining: res.response.headers["x-ratelimit-remaining"] ?? null,
+    };
+  });
+}
+
+/* 💬 Hacker News（Algolia）：その日の話題。点数順に並ぶ？ いつから？ */
+async function probeHn() {
+  const day = (d) => [Date.parse(d + "T00:00:00Z") / 1000, Date.parse(d + "T00:00:00Z") / 1000 + 86400];
+  const [a, b] = day("2020-03-12");
+  const p = (o) => new URLSearchParams({ tags: "story", hitsPerPage: "10", ...o });
+  return runCalls({
+    top_2020_03_12: `${HN}/search?${p({ numericFilters: `created_at_i>=${a},created_at_i<${b}` })}`,
+    bitcoin_2020_03_12: `${HN}/search?${p({ query: "bitcoin", numericFilters: `created_at_i>=${a},created_at_i<${b}`, hitsPerPage: "5" })}`,
+    before_2007: `${HN}/search_by_date?${p({ numericFilters: "created_at_i<1167609600", hitsPerPage: "5" })}`,
+  }, (res) => {
+    const body = res.response.body;
+    if (!body || !Array.isArray(body.hits)) return { http_status: res.response.http_status, error: errOf(res) };
+    return {
+      http_status: res.response.http_status,
+      nbHits: body.nbHits,
+      hits: body.hits.map((h) => ({ title: h.title, points: h.points, comments: h.num_comments, created_at: h.created_at, site: h.url ? (() => { try { return new URL(h.url).host; } catch { return null; } })() : null })),
+    };
+  });
 }
 
 /* cron: 毎時 5分・35分。F&G の観測 → 倉庫の1歩 */
@@ -1145,7 +1321,13 @@ export default {
             "/probe/fng-timing — when each Fear & Greed value first appeared in the API, and which live value it equals",
             "/probe/wiki — Wikipedia page views: where the daily series starts, gaps, delay, other languages, redirects, the whole-site total",
             "/probe/wiki-top — Wikipedia's most-read pages of a day: where they start, how many, by language and country, how late the newest list is",
-            "/probe/gdelt — GDELT news volume for 'bitcoin': how far back it reaches (takes ~20 s: GDELT allows one call every 5 s)",
+            "/probe/gdelt — GDELT news volume for 'bitcoin': how far back it reaches (takes ~20 s: GDELT allows one call every 5 s; ?only=before_2017|2017_01|2020_03|last_7_days for one call)",
+            "/probe/weather — Open-Meteo daily weather: where it starts, how late the newest days are, 2013→today in one call",
+            "/probe/quakes — USGS earthquakes: daily counts, the biggest of a day, whether events are updated later",
+            "/probe/fx — ECB exchange rates (Frankfurter): where they start, weekends, the latest date",
+            "/probe/chain — Blockchain.com charts: transactions per day and hash rate since the start, spacing and time of day",
+            "/probe/apod — NASA Astronomy Picture of the Day: first day, copyright field, DEMO_KEY limit",
+            "/probe/hn — Hacker News (Algolia): the top stories of a day, and how far back the index goes",
           ],
           archive_layout: ARCHIVE_LAYOUT,
           fng_time_note: FNG_TIME_NOTE,
@@ -1156,7 +1338,13 @@ export default {
       /* ── 他の窓の probe（CMC のキーも倉庫もいらない）── */
       if (p === "/probe/wiki") return out(await probeWiki());
       if (p === "/probe/wiki-top") return out(await probeWikiTop());
-      if (p === "/probe/gdelt") return out(await probeGdelt());
+      if (p === "/probe/gdelt") return out(await probeGdelt(url.searchParams.get("only")));
+      if (p === "/probe/weather") return out(await probeWeather());
+      if (p === "/probe/quakes") return out(await probeQuakes());
+      if (p === "/probe/fx") return out(await probeFx());
+      if (p === "/probe/chain") return out(await probeChain());
+      if (p === "/probe/apod") return out(await probeApod());
+      if (p === "/probe/hn") return out(await probeHn());
 
       /* ── 倉庫だけで答えるもの（CMC を叩かない）── */
       if (p === "/series" || p === "/archive/status" || p === "/probe/fng-timing") {
