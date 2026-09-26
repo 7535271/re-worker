@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="light dark">
 <title>RE: Temporal Playground</title>
 <meta name="description" content="Pick a day in Bitcoin's history. RE: finds the most similar pasts that were already visible from that day, and replays what came after them.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b0b0b'/%3E%3Ctext x='32' y='42' font-family='system-ui,sans-serif' font-size='26' font-weight='700' fill='%23fcfcfb' text-anchor='middle'%3ERE:%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23F6B896'/%3E%3Ctext x='30' y='42' font-family='system-ui,sans-serif' font-size='27' font-weight='800' fill='%23ffffff' text-anchor='middle'%3ERE%3Ctspan fill='%23D3CEC7'%3E:%3C/tspan%3E%3C/text%3E%3C/svg%3E">
 <style>
   :root {
     color-scheme: light;
@@ -26,6 +26,9 @@
     --meter-track: #ecebe6;
     --on-bg: #0b0b0b;
     --on-ink: #fcfcfb;
+    --brand-bg: #F6B896;      /* the RE: mark: pale orange, white letters, pale gray colon */
+    --brand-ink: #ffffff;
+    --brand-colon: #D3CEC7;
   }
   @media (prefers-color-scheme: dark) {
     :root:where(:not([data-theme="light"])) {
@@ -46,6 +49,8 @@
       --meter-track: #2c2c2a;
       --on-bg: #ffffff;
       --on-ink: #1a1a19;
+      --brand-bg: #D6936D;
+      --brand-colon: #D8D2CA;
     }
   }
   :root[data-theme="dark"] {
@@ -66,6 +71,8 @@
     --meter-track: #2c2c2a;
     --on-bg: #ffffff;
     --on-ink: #1a1a19;
+    --brand-bg: #D6936D;
+    --brand-colon: #D8D2CA;
   }
 
   * { box-sizing: border-box; }
@@ -321,7 +328,14 @@
   .screen[hidden] { display: none; }
   @keyframes slide { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
   .topline { display: flex; align-items: baseline; gap: 10px; padding: 14px 2px 0; min-height: 36px; }
-  .topline .mark { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+  .topline { align-items: center; }
+  /* capital letters have no descenders, so an even padding makes the tag look low: trim the line box to the letters where the browser can, and lift them by hand where it cannot */
+  .topline .mark { display: inline-block; padding: 6.5px 9px 3.5px; border-radius: 9px; background: var(--brand-bg); color: var(--brand-ink); font-size: 19px; line-height: 1; font-weight: 800; letter-spacing: -0.02em; }
+  @supports (text-box: trim-both cap alphabetic) {
+    .topline .mark { text-box: trim-both cap alphabetic; padding: 7px 9px; }
+  }
+  /* a colon sits between the baseline and the lowercase height, so next to capitals it looks low: lift it to the middle of the capitals */
+  .topline .mark .colon { color: var(--brand-colon); position: relative; top: -0.09em; }
   .trail { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 0; }
   .trail button { border: 0; background: none; padding: 4px 2px; color: var(--ink-2); font: inherit; font-weight: 600; cursor: pointer; }
   .trail button[aria-current="true"] { color: var(--ink); }
@@ -439,7 +453,7 @@
 
   <!-- 1. the day you stand on -->
   <main id="v-home" class="screen" aria-label="The day you stand on">
-    <div class="topline"><span class="mark">RE:</span><nav id="trail-home" class="trail" aria-label="Where you have stood"></nav></div>
+    <div class="topline"><span class="mark" aria-label="RE:">RE<span class="colon">:</span></span><nav id="trail-home" class="trail" aria-label="Where you have stood"></nav></div>
     <section class="stage" aria-label="Pick a day">
       <label class="ov yr"><span id="h-yr" class="big-y"></span><select id="d-y" aria-label="Year"></select></label>
       <div class="md">
