@@ -1286,6 +1286,146 @@ async function probeHn() {
   });
 }
 
+/* ──────────────────────────────────────────
+   /scene?day=YYYY-MM-DD — その日を、いくつもの窓から覗いた「景色」
+   ・どれも「その日そのもの」を表すもの。ほとんどは、その日が終わってから決まった
+     （D に立ったとき D 自身の景色を見せるかどうかは、画面の側で決める）
+   ・窓ごとに時代がある。窓が開く前の日は ABSENT（理由つき）。取れなかった窓も ABSENT（0 にしない）
+   ・過去の日の景色は変わらないので、倉庫（KV）にしまって使い回す
+   ────────────────────────────────────────── */
+const SCENE_V = "v1";
+const WINDOW_FROM = { wikipedia: "2015-07-01", hacker_news: "2006-10-09", apod: "1995-06-16", fx: "1999-01-04" };
+const WIKI_SKIP = /^(Main_Page|Special:|Wikipedia:|User:|User_talk:|Portal:|File:|Help:|Template:|Category:|Talk:|Draft:|MediaWiki:|Module:|メインページ$|特別:|利用者:|ファイル:|ヘルプ:|ノート:|ポータル:|プロジェクト:|-$)/;
+
+function absent(reason) { return { state: "absent", reason }; }
+function failed(r) {
+  const why = r.response.text || (r.response.body && (r.response.body.reason || r.response.body.msg || r.response.body.title)) || `HTTP ${r.response.http_status}`;
+  return absent(`could not be read this time: ${String(why).slice(0, 160)}`);
+}
+function htmlText(s) {
+  return String(s || "").replace(/<[^>]*>/g, " ").replace(/&amp;/g, "&").replace(/&nbsp;/g, " ").replace(/&[a-z]+;/g, " ").replace(/\s+/g, " ").trim();
+}
+
+async function sceneWikipedia(day, lang) {
+  if (day < WINDOW_FROM.wikipedia) return absent(`this window opens on ${WINDOW_FROM.wikipedia}`);
+  const r = await look(`${WIKI}/top/${lang}.wikipedia/all-access/${day.replace(/-/g, "/")}`, { timeoutMs: 8000 });
+  const arts = r.response.body && r.response.body.items && r.response.body.items[0] && r.response.body.items[0].articles;
+  if (!Array.isArray(arts)) return r.response.http_status === 404 ? absent("not published yet (about a day late)") : failed(r);
+  const items = arts.filter((a) => !WIKI_SKIP.test(a.article)).slice(0, 10).map((a) => ({
+    title: a.article.replace(/_/g, " "), views: a.views, url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(a.article)}`,
+  }));
+  return { state: "on", source: `Wikimedia pageviews, most-read ${lang}.wikipedia pages (site pages removed)`, known: "after the day ends (about a day later)", items };
+}
+
+async function sceneHackerNews(day) {
+  if (day < WINDOW_FROM.hacker_news) return absent(`this window opens on ${WINDOW_FROM.hacker_news}`);
+  const a = Date.parse(day + "T00:00:00Z") / 1000;
+  const q = new URLSearchParams({ tags: "story", hitsPerPage: "5", numericFilters: `created_at_i>=${a},created_at_i<${a + 86400}` });
+  const r = await look(`${HN}/search?${q}`, { timeoutMs: 8000 });
+  const hits = r.response.body && r.response.body.hits;
+  if (!Array.isArray(hits)) return failed(r);
+  return {
+    state: "on", source: "Hacker News via Algolia, stories of the day by points", known: "during and after the day (points keep changing)",
+    items: hits.map((h) => ({ title: h.title, points: h.points, comments: h.num_comments, url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`, hn_url: `https://news.ycombinator.com/item?id=${h.objectID}` })),
+  };
+}
+
+/* NASA APOD はキーを使わずに、その日のページ（静的な HTML）から題名と credit を読む */
+async function sceneApod(day) {
+  if (day < WINDOW_FROM.apod) return absent(`this window opens on ${WINDOW_FROM.apod}`);
+  const page = `https://apod.nasa.gov/apod/ap${day.slice(2, 4)}${day.slice(5, 7)}${day.slice(8, 10)}.html`;
+  const res = await fetchText(page, 8000);
+  if (!res.ok) return res.status === 404 ? absent("no picture page for this day") : absent(`could not be read this time: ${res.error || "HTTP " + res.status}`);
+  const t = (res.text.match(/<title>([\s\S]*?)<\/title>/i) || [])[1] || "";
+  const title = htmlText(t).replace(/^APOD:\s*\d{4}\s+\w+\s+\d{1,2}\s*-\s*/i, "");
+  const cm = res.text.match(/(Credit|Copyright)[\s\S]{0,400}?(<\/center>|<\/p>|<p>)/i);
+  const credit = cm ? htmlText(cm[0]).replace(/\s*(Explanation|Tomorrow's picture).*$/i, "").replace(/\s+:/g, ":").slice(0, 160) : null;
+  return { state: "on", source: "NASA Astronomy Picture of the Day (page link; images belong to their credited owners)", known: "published that day (US time)", title: title || null, credit, page_url: page };
+}
+async function fetchText(url, timeoutMs) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { headers: { "User-Agent": UA }, signal: ctl.signal });
+    const text = await r.text();
+    return { ok: r.ok, status: r.status, text };
+  } catch (e) {
+    return { ok: false, status: -1, error: ctl.signal.aborted ? `no answer within ${timeoutMs / 1000} s` : String(e && e.message ? e.message : e) };
+  } finally { clearTimeout(timer); }
+}
+
+async function sceneQuakes(day) {
+  const p = (o) => new URLSearchParams({ format: "geojson", minmagnitude: "4.5", starttime: day, endtime: shiftDay(day, 1), ...o });
+  const [c, q] = await Promise.all([
+    look(`${USGS}/count?${p({})}`, { timeoutMs: 8000 }),
+    look(`${USGS}/query?${p({ orderby: "magnitude", limit: "3" })}`, { timeoutMs: 8000 }),
+  ]);
+  const count = c.response.body && typeof c.response.body.count === "number" ? c.response.body.count : null;
+  const feats = q.response.body && Array.isArray(q.response.body.features) ? q.response.body.features : null;
+  if (count === null && !feats) return failed(c);
+  const biggest = (feats || []).map((f) => ({ mag: f.properties.mag, place: f.properties.place, time: iso(f.properties.time), updated: f.properties.updated ? iso(f.properties.updated) : null }));
+  const revised = biggest.some((b) => b.updated && Date.parse(b.updated) - Date.parse(b.time) > 30 * DAY);
+  return {
+    state: "on", source: "USGS earthquake catalog, magnitude 4.5 and above (UTC day)", known: "within about an hour; revised later",
+    count_m45: count, biggest, revised_later: revised,
+  };
+}
+
+async function sceneFx(day) {
+  if (day < WINDOW_FROM.fx) return absent(`this window opens on ${WINDOW_FROM.fx}`);
+  const r = await look(`${FRANKFURTER}/${day}?base=USD&symbols=JPY,EUR`, { timeoutMs: 8000 });
+  const b = r.response.body;
+  if (!b || !b.rates) return failed(r);
+  return {
+    state: "on", source: "ECB reference rates via Frankfurter", known: "published on business days (about 16:00 CET)",
+    rate_date: b.date, usd_jpy: b.rates.JPY ?? null, usd_eur: b.rates.EUR ?? null,
+    note: b.date !== day ? `no rate on ${day} (weekend or holiday); this is ${b.date}` : null,
+  };
+}
+
+function sceneX(day) {
+  const q = `bitcoin since:${day} until:${shiftDay(day, 1)}`;
+  return {
+    state: "door", source: "X search (opens in X; RE: fetches nothing from X)",
+    url: `https://x.com/search?q=${encodeURIComponent(q)}&src=typed_query&f=top`,
+    note: "X's API has no free way to read past posts, so this window is a door, not data.",
+  };
+}
+
+async function scene(env, url) {
+  const day = url.searchParams.get("day");
+  const today = dayKey(iso(nowMs()));
+  if (!isDay(day) || day > today) {
+    return out({ error: "bad parameters", problems: ["day is required as YYYY-MM-DD, not after today"], example: "/scene?day=2020-03-12" }, 400);
+  }
+  const ns = env.RE_CACHE || null;
+  const key = `scene:${SCENE_V}:${day}`;
+  if (ns && url.searchParams.get("fresh") !== "1") {
+    const hit = await ns.get(key);
+    if (hit) return new Response(hit, { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-RE-Scene": "archive", ...CORS } });
+  }
+  const [wen, wja, hn, apod, quakes, fx] = await Promise.all([
+    sceneWikipedia(day, "en"), sceneWikipedia(day, "ja"), sceneHackerNews(day), sceneApod(day), sceneQuakes(day), sceneFx(day),
+  ]);
+  const windows = { wikipedia_en: wen, wikipedia_ja: wja, hacker_news: hn, apod, earthquakes: quakes, fx, x: sceneX(day) };
+  const body = {
+    day,
+    generated_at: iso(nowMs()),
+    time_note: "Each window describes the day itself. Most of it was only known after the day ended, so on day D itself it was not yet visible.",
+    windows,
+  };
+  const text = JSON.stringify(body);
+  if (ns) {
+    // 全部そろった過去の日（2日以上前）はずっとしまう。欠けがある日や最近の日は1時間だけ
+    const complete = Object.values(windows).every((w) => w.state !== "absent" || /opens on|no picture page/.test(w.reason || ""));
+    const settled = day <= shiftDay(today, -2);
+    try {
+      await ns.put(key, text, complete && settled ? {} : { expirationTtl: 3600 });
+    } catch (e) { console.error("scene cache", e); }
+  }
+  return new Response(text, { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-RE-Scene": "fresh", ...CORS } });
+}
+
 /* cron: 毎時 5分・35分。F&G の観測 → 倉庫の1歩 */
 async function runCron(env, scheduledTime) {
   if (!env.CMC_KEY || !env.RE_CACHE) return;
@@ -1317,6 +1457,7 @@ export default {
           endpoints: [
             "/ — the app (public/index.html, public/app.js, public/engine.js)",
             "/series?id=1 — every stored day for the asset, from the archive (no CMC call). Optional &from=2020&to=2024 (years)",
+            "/scene?day=YYYY-MM-DD — the same day through other windows: Wikipedia (en, ja), Hacker News, NASA APOD, earthquakes, ECB rates, and a door to X search",
             "/archive/status — what the archive holds, what is missing, recent errors",
             "/archive/step — do one unit of archive work now (build one missing year, or refresh the recent days)",
             "/state?id=1&start=YYYY-MM-DD&end=YYYY-MM-DD — MarketState for every day from start to end, live from CMC (start and end are required, both inclusive)",
@@ -1342,6 +1483,7 @@ export default {
       /* ── 他の窓の probe（CMC のキーも倉庫もいらない）── */
       if (p === "/probe/wiki") return out(await probeWiki());
       if (p === "/probe/wiki-top") return out(await probeWikiTop());
+      if (p === "/scene") return await scene(env, url);
       if (p === "/probe/gdelt") return out(await probeGdelt(url.searchParams.get("only")));
       if (p === "/probe/weather") return out(await probeWeather());
       if (p === "/probe/quakes") return out(await probeQuakes());
