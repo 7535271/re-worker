@@ -176,11 +176,6 @@ function setupControls() {
   }
   $("look").addEventListener("click", () => go({ view: "day", open: null }));
   $("how-link").addEventListener("click", () => go({ view: "how", open: null }));
-  // the header gets a hairline once the page scrolls under it
-  const top = document.querySelector(".topline");
-  const onScroll = () => top.classList.toggle("scrolled", window.scrollY > 4);
-  window.addEventListener("scroll", onScroll, { passive: true });
-  onScroll();
   $("p-prev").addEventListener("click", () => go({ sel: S.sel - 1, open: null }, false));
   $("p-next").addEventListener("click", () => go({ sel: S.sel + 1, open: null }, false));
   $("stand").addEventListener("click", standHere);
