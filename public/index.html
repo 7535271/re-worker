@@ -240,6 +240,20 @@
   details { margin-top: 12px; }
   summary { cursor: pointer; font-size: 13px; color: var(--ink-2); min-height: 32px; display: flex; align-items: center; }
   details p { font-size: 13px; color: var(--ink-2); margin: 6px 0; }
+  .world-day { margin: 0 0 4px; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .world-day .k { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+  .world { display: flex; flex-direction: column; gap: 14px; }
+  .win h3 { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 0 0 4px; font-size: 13px; font-weight: 650; }
+  .win h3 .when { font-size: 11px; font-weight: 400; color: var(--muted); white-space: nowrap; }
+  .win ol { list-style: none; margin: 0; padding: 0; }
+  .win li { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--grid); font-size: 13px; }
+  .win li:last-child { border-bottom: 0; }
+  .win li .n { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .win a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--axis); text-underline-offset: 3px; overflow-wrap: anywhere; }
+  .win .one { margin: 0; font-size: 14px; }
+  .win .sub { margin: 2px 0 0; font-size: 12px; color: var(--ink-2); }
+  .win .absent { margin: 0; font-size: 12px; color: var(--muted); }
+  .win a.door { display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; border-radius: 10px; background: var(--plane); box-shadow: inset 0 0 0 1px var(--ring); text-decoration: none; font-size: 13px; font-weight: 600; }
   footer { font-size: 12px; color: var(--muted); padding: 6px 2px; }
   footer a { color: var(--ink-2); }
   .loading { opacity: 0.55; transition: opacity 0.15s; }
@@ -290,6 +304,13 @@
       <p class="label" style="margin-top:14px">Why it matched</p>
       <div id="why" class="why"></div>
     </div>
+  </section>
+
+  <section id="world" class="card" aria-label="The world that day" style="display:none">
+    <p class="label">The world that day</p>
+    <p id="world-day" class="world-day"></p>
+    <p class="note" style="margin:0 0 10px">Other windows onto the same day. The past ended long before D, so all of it was already public on D — shown as each source reports it today.</p>
+    <div id="world-body" class="world" aria-live="polite"></div>
   </section>
 
   <section class="card" aria-label="Similar pasts">

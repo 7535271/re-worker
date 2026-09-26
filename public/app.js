@@ -309,6 +309,129 @@ function renderReplay() {
   drawChart();
   renderTable(D, selRep, r);
   renderWhy(r);
+  renderWorld(r);
+}
+
+/* ── the world that day: other windows onto the chosen past's event day (/scene) ── */
+const scenes = new Map(); // day → Promise<body>
+let worldToken = 0;
+function loadScene(day) {
+  if (!scenes.has(day)) {
+    const p = fetch(`/scene?day=${day}`).then(async (r) => {
+      const body = await r.json().catch(() => null);
+      if (!r.ok || !body || !body.windows) throw new Error((body && body.error) || `HTTP ${r.status}`);
+      return body;
+    });
+    p.catch(() => scenes.delete(day)); // a failure is not remembered: the next look tries again
+    scenes.set(day, p);
+  }
+  return scenes.get(day);
+}
+function safeHref(u) {
+  try { const x = new URL(u); return x.protocol === "https:" || x.protocol === "http:" ? x.href : null; } catch { return null; }
+}
+function link(href, text) {
+  const h = safeHref(href);
+  return h ? el("a", { href: h, target: "_blank", rel: "noopener noreferrer" }, text) : el("span", {}, text);
+}
+function winBox(title, when) {
+  const box = el("div", { class: "win" });
+  const h = el("h3");
+  h.append(el("span", {}, title));
+  if (when) h.append(el("span", { class: "when" }, when));
+  box.append(h);
+  return box;
+}
+function listOf(items, text, num) {
+  const ol = el("ol");
+  for (const it of items) {
+    const li = el("li");
+    li.append(link(it.url, text(it)), el("span", { class: "n" }, num(it)));
+    ol.append(li);
+  }
+  return ol;
+}
+function absentLine(w) {
+  return el("p", { class: "absent" }, `– ${w.reason || "no data for this day"}`);
+}
+
+async function renderWorld(r) {
+  const card = $("world");
+  card.style.display = r ? "" : "none";
+  if (!r) return;
+  const token = ++worldToken;
+  const head = $("world-day");
+  head.textContent = "";
+  head.append(el("span", { class: "k", style: "background:var(--series-sel)" }), textWithDates("span", {}, `Similar past ${S.sel + 1} · event day ${r.day}`));
+  const box = $("world-body");
+  box.textContent = "";
+  box.append(el("p", { class: "note" }, "Looking through other windows…"));
+  box.classList.add("loading");
+  let sc;
+  try { sc = await loadScene(r.day); } catch (e) {
+    if (token !== worldToken) return;
+    box.classList.remove("loading");
+    box.textContent = "";
+    box.append(el("p", { class: "note" }, `The other windows could not be reached this time (${e.message}). Choosing this past again will retry.`));
+    return;
+  }
+  if (token !== worldToken) return; // the choice changed while this was loading
+  box.classList.remove("loading");
+  box.textContent = "";
+  const w = sc.windows;
+
+  const wiki = (key, title, n) => {
+    const x = w[key], b = winBox(title, x && x.state === "on" ? "most read · a day later" : null);
+    if (!x || x.state !== "on") b.append(absentLine(x || {}));
+    else if (!x.items.length) b.append(absentLine({ reason: "no pages listed" }));
+    else b.append(listOf(x.items.slice(0, n), (i) => i.title, (i) => int(i.views)));
+    return b;
+  };
+  box.append(wiki("wikipedia_en", "Wikipedia · English", 5));
+
+  const hn = w.hacker_news, bh = winBox("Hacker News", hn && hn.state === "on" ? "top stories · points today" : null);
+  if (!hn || hn.state !== "on") bh.append(absentLine(hn || {}));
+  else if (!hn.items.length) bh.append(absentLine({ reason: "no stories that day" }));
+  else bh.append(listOf(hn.items.slice(0, 3), (i) => i.title, (i) => `${int(i.points)} pts`));
+  box.append(bh);
+
+  const ap = w.apod, ba = winBox("NASA · Picture of the Day", null);
+  if (!ap || ap.state !== "on") ba.append(absentLine(ap || {}));
+  else {
+    const p = el("p", { class: "one" });
+    p.append(link(ap.page_url, ap.title || "(untitled)"));
+    ba.append(p);
+    if (ap.credit) ba.append(el("p", { class: "sub" }, ap.credit));
+  }
+  box.append(ba);
+
+  const q = w.earthquakes, bq = winBox("Earthquakes · M4.5+", q && q.revised_later ? "revised later" : null);
+  if (!q || q.state !== "on") bq.append(absentLine(q || {}));
+  else {
+    bq.append(el("p", { class: "one" }, q.count_m45 === null ? "count unavailable" : `${int(q.count_m45)} on this UTC day`));
+    const big = (q.biggest || [])[0];
+    if (big) bq.append(el("p", { class: "sub" }, `Largest: M${Number(big.mag).toFixed(1)} · ${big.place || "unnamed place"}`));
+  }
+  box.append(bq);
+
+  const fx = w.fx, bf = winBox("Exchange rates · ECB", null);
+  if (!fx || fx.state !== "on") bf.append(absentLine(fx || {}));
+  else {
+    const f = (v, d) => (v === null || v === undefined ? "—" : Number(v).toFixed(d));
+    bf.append(el("p", { class: "one" }, `1 USD = ${f(fx.usd_jpy, 2)} JPY · ${f(fx.usd_eur, 4)} EUR`));
+    if (fx.note) bf.append(textWithDates("p", { class: "sub" }, fx.note));
+  }
+  box.append(bf);
+
+  box.append(wiki("wikipedia_ja", "Wikipedia · 日本語", 3));
+
+  const x = w.x, bx = winBox("X", "a door, not data");
+  if (x && x.url) {
+    const a = link(x.url, "Search X for “bitcoin” that day ↗");
+    a.className = "door";
+    bx.append(a);
+  }
+  box.append(bx);
 }
 
 function niceTicks(lo, hi, count = 4) {
@@ -500,6 +623,7 @@ function renderFooter() {
   const lastOn = meta.last_on || {};
   f.append(el("div", {}, `Archive: ${ex.first} → ${ex.last}. Fear & Greed through ${lastOn.sentiment || "—"}.`));
   f.append(el("div", {}, "Data: CoinMarketCap API (quotes, OHLCV and Fear & Greed history), kept in RE:'s own archive. RE: observes; it does not predict."));
+  f.append(el("div", {}, "Other windows: Wikimedia pageviews, Hacker News (Algolia), NASA APOD, USGS earthquakes, ECB rates via Frankfurter; X is a link only."));
 }
 
 boot();
