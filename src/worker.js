@@ -1303,15 +1303,16 @@ const WINDOW_FROM = { wikipedia: "2015-07-01", hacker_news: "2006-10-09", apod: 
    ・value_status = 見せている値の状態。as_published（公開されたまま変わらない）／current（今も変わり続けていて、今の値を見せる）
      ／revised（あとから書き換わる。今の値を見せる）。AS OF の画面でも、値そのものはこの状態のまま（ノヴァの二軸） */
 const WINDOW_TIME = {
-  wikipedia_en: { event: "people reading during the UTC day", observation: "counted by Wikimedia as it happens", publication: "about a day after the day ends (being measured: /probe/published)", revision: "none known", value_status: "as_published", as_of_lag: 2 },
-  wikipedia_ja: { event: "people reading during the UTC day", observation: "counted by Wikimedia as it happens", publication: "about a day after the day ends (being measured: /probe/published)", revision: "none known", value_status: "as_published", as_of_lag: 2 },
-  hacker_news: { event: "stories posted during the UTC day", observation: "public as soon as posted", publication: "as they are posted", revision: "points and comments keep changing; RE: can only read today's values", value_status: "current", as_of_lag: 1 },
-  apod: { event: "the picture chosen for that date", observation: "public on that date", publication: "on that date, US Eastern time (before 00:00 UTC of the next day)", revision: "none known", value_status: "as_published", as_of_lag: 1 },
+  // 4つの時間は型紙。窓が持っているものだけ書く（2026-09-27、ノヴァ）
+  wikipedia_en: { event: "people reading during the UTC day", observation: "counted by Wikimedia as it happens", publication: "about a day after the day ends (being measured: /probe/published)", value_status: "as_published", as_of_lag: 2 },
+  wikipedia_ja: { event: "people reading during the UTC day", observation: "counted by Wikimedia as it happens", publication: "about a day after the day ends (being measured: /probe/published)", value_status: "as_published", as_of_lag: 2 },
+  hacker_news: { event: "stories posted during the UTC day", publication: "the moment they are posted", revision: "points and comments keep changing; RE: can only read today's values", value_status: "current", as_of_lag: 1 },
+  apod: { publication: "one picture per date, US Eastern time (before 00:00 UTC of the next day)", value_status: "as_published", as_of_lag: 1 },
   earthquakes: { event: "earthquakes during the UTC day", observation: "detected within minutes", publication: "within about an hour of each event", revision: "magnitudes and locations are revised, sometimes years later; RE: can only read today's values", value_status: "revised", as_of_lag: 1 },
-  fx: { event: "the ECB reference rate of a business day", observation: "set once that day", publication: "that day, about 16:00 CET", revision: "none known", value_status: "as_published", as_of_lag: 1 },
-  bitcoin_network: { event: "blocks and transactions during the UTC day", observation: "public on the chain as it happens", publication: "daily chart values from Blockchain.com; when a day appears is being measured (/probe/published)", revision: "not known; hash rate is an estimate from block timing", value_status: "current", as_of_lag: 2 },
+  fx: { event: "the ECB sets one reference rate per business day", publication: "that day, about 16:00 CET", value_status: "as_published", as_of_lag: 1 },
+  bitcoin_network: { event: "blocks and transactions during the UTC day", observation: "public on the chain as it happens; the hash rate is estimated from how fast blocks were found", publication: "daily chart values from Blockchain.com; when a day appears is being measured (/probe/published)", value_status: "current", as_of_lag: 2 },
   weather: { event: "the weather during the UTC day at one place", observation: "felt and measured there as it happens", publication: "Open-Meteo Best Match: ECMWF IFS every 6 hours without delay (2017 on), ERA5 about 5 days later (1940 on); being measured: /probe/published", revision: "recent values can change when ERA5 arrives; days before 2017 are a reconstruction made years later", value_status: "revised", as_of_lag: 2 },
-  x: { event: "posts during the UTC day", observation: "public as soon as posted", publication: "as they are posted", revision: "posts can be deleted or edited later", value_status: "current", as_of_lag: 1 },
+  x: { event: "posts during the UTC day", publication: "the moment they are posted", revision: "posts can be deleted or edited later", value_status: "current", as_of_lag: 1 },
 };
 const WIKI_SKIP = /^(Main_Page|Special:|Wikipedia:|User:|User_talk:|Portal:|File:|Help:|Template:|Category:|Talk:|Draft:|MediaWiki:|Module:|メインページ$|特別:|利用者:|ファイル:|ヘルプ:|ノート:|ポータル:|プロジェクト:|-$)/;
 
@@ -1528,6 +1529,86 @@ async function scene(env, url) {
 }
 
 /* ──────────────────────────────────────────
+   /window-series?w=attention|tx|hash|weather — 数字の窓の毎日の値（似てる過去を窓ごとに比べるため）
+   ・attention = Wikipedia 英語版 "Bitcoin" 記事の閲覧数（人のアクセスだけ）。2015-07-01 から
+   ・tx / hash = Blockchain.com の取引数とハッシュレート（TH/s）
+   ・weather   = Open-Meteo の天気（?lat=&lon=&place= の場所。UTC の1日）
+   値は「その日に起きた分」。D 00:00 に見えていたのは D − as_of_lag の分まで（画面の側でずらす）
+   倉庫（KV）に6時間しまう（毎回取りに行かない。書き込みは窓ごとに1日4回まで）
+   ────────────────────────────────────────── */
+const SERIES_V = "v1";
+const SERIES_FROM = "2012-04-01"; // 倉庫の最初の日（2013-04-28）の1年前から：最初の日から「過去1年の中の位置」が出せるように
+const SERIES_TTL = 6 * 3600;
+async function seriesAttention(today) {
+  const r = await look(`${WIKI}/per-article/en.wikipedia/all-access/user/Bitcoin/daily/2015070100/${ymdCompact(today)}00`, { timeoutMs: 12000 });
+  const items = r.response.body && Array.isArray(r.response.body.items) ? r.response.body.items : null;
+  if (!items || !items.length) return { error: String(errOf(r) || `HTTP ${r.response.http_status}`).slice(0, 200) };
+  const d0 = dayNum("2015-07-01");
+  const n = dayNum(today) - d0 + 1;
+  const values = new Array(n).fill(null);
+  for (const it of items) {
+    const t = it.timestamp; // YYYYMMDD00
+    const i = Date.UTC(+t.slice(0, 4), +t.slice(4, 6) - 1, +t.slice(6, 8)) / DAY - d0;
+    if (i >= 0 && i < n && typeof it.views === "number") values[i] = it.views;
+  }
+  let last = n - 1;
+  while (last >= 0 && values[last] === null) last--;
+  return { from: "2015-07-01", values: values.slice(0, last + 1), unit: "views per day (people, not bots)", source: "Wikimedia pageviews: en.wikipedia 'Bitcoin'" };
+}
+async function seriesChain(chart, today) {
+  // timespan=all はプローブで確かめた形（2009年からの全部。SERIES_FROM より前は捨てる）
+  const r = await look(`${CHAIN}/${chart}?timespan=all&format=json&sampled=false`, { timeoutMs: 12000 });
+  const v = r.response.body && Array.isArray(r.response.body.values) ? r.response.body.values : null;
+  if (!v || !v.length) return { error: String(errOf(r) || `HTTP ${r.response.http_status}`).slice(0, 200) };
+  const d0 = dayNum(SERIES_FROM);
+  const n = dayNum(today) - d0 + 1;
+  const values = new Array(n).fill(null);
+  for (const p of v) {
+    if (!p || typeof p.x !== "number" || typeof p.y !== "number") continue;
+    const i = Math.floor(p.x / 86400) - d0;
+    if (i >= 0 && i < n) values[i] = Number(p.y.toPrecision(5));
+  }
+  let last = n - 1;
+  while (last >= 0 && values[last] === null) last--;
+  return chart === "hash-rate"
+    ? { from: SERIES_FROM, values: values.slice(0, last + 1), unit: "TH/s (daily estimate)", source: "Blockchain.com hash-rate" }
+    : { from: SERIES_FROM, values: values.slice(0, last + 1), unit: "confirmed transactions per day", source: "Blockchain.com n-transactions" };
+}
+async function seriesWeather(place, today) {
+  const daily = "temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code";
+  const r = await look(`${OPEN_METEO}?${new URLSearchParams({ latitude: String(place.lat), longitude: String(place.lon), start_date: SERIES_FROM, end_date: today, daily, timezone: "UTC" })}`, { timeoutMs: 15000 });
+  const d = r.response.body && r.response.body.daily;
+  if (!d || !Array.isArray(d.time)) return { error: String(errOf(r) || `HTTP ${r.response.http_status}`).slice(0, 200) };
+  let last = d.time.length - 1;
+  while (last >= 0 && (d.temperature_2m_max[last] === null || d.temperature_2m_max[last] === undefined)) last--;
+  const cut = (k) => (d[k] || []).slice(0, last + 1).map((x) => (typeof x === "number" ? x : null));
+  return { from: d.time[0], place: place.name, lat: place.lat, lon: place.lon, tmax: cut("temperature_2m_max"), tmin: cut("temperature_2m_min"), precip: cut("precipitation_sum"), code: cut("weather_code"), unit: "°C, mm (UTC day)", source: "Open-Meteo historical weather (Best Match)" };
+}
+async function windowSeries(env, url) {
+  const w = url.searchParams.get("w");
+  const lagOf = { attention: WINDOW_TIME.wikipedia_en.as_of_lag, tx: WINDOW_TIME.bitcoin_network.as_of_lag, hash: WINDOW_TIME.bitcoin_network.as_of_lag, weather: WINDOW_TIME.weather.as_of_lag };
+  if (!(w in lagOf)) return out({ error: "bad parameters", problems: ["w must be attention, tx, hash or weather"], example: "/window-series?w=attention" }, 400);
+  const place = w === "weather" ? placeOf(url) : null;
+  if (w === "weather" && (!place || place.bad)) return out({ error: "bad parameters", problems: ["weather needs lat (−90…90) and lon (−180…180)"], example: "/window-series?w=weather&lat=35.68&lon=139.69&place=Tokyo" }, 400);
+  const ns = env.RE_CACHE || null;
+  const key = `wseries:${SERIES_V}:${w}${place ? `:${place.lat},${place.lon}` : ""}`;
+  const send = (text, how) => new Response(text, { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-RE-Window": how, ...CORS } });
+  if (ns && url.searchParams.get("fresh") !== "1") {
+    const hit = await ns.get(key);
+    if (hit) return send(hit, "archive");
+  }
+  const today = dayKey(iso(nowMs()));
+  const body = w === "attention" ? await seriesAttention(today)
+    : w === "tx" ? await seriesChain("n-transactions", today)
+    : w === "hash" ? await seriesChain("hash-rate", today)
+    : await seriesWeather(place, today);
+  if (body.error) return out({ error: `the ${w} window could not be read this time`, detail: body.error }, 502);
+  const text = JSON.stringify({ w, as_of_lag: lagOf[w], generated_at: iso(nowMs()), ...body });
+  if (ns) { try { await ns.put(key, text, { expirationTtl: SERIES_TTL }); } catch (e) { console.error("window cache", e); } }
+  return send(text, "fresh");
+}
+
+/* ──────────────────────────────────────────
    いつ公開されたか（/probe/published）
    「D 00:00 に D−1 の分はもう出ていたか」を測る。cron のたびに、昨日（UTC）の分が出たかを見て、
    初めて見えた時刻を記録する。F&G の fng-timing と同じ考え方。書き込むのは何か新しく分かったときだけ
@@ -1622,6 +1703,7 @@ export default {
             "/ — the app (public/index.html, public/app.js, public/engine.js)",
             "/series?id=1 — every stored day for the asset, from the archive (no CMC call). Optional &from=2020&to=2024 (years)",
             "/scene?day=YYYY-MM-DD — the same day through other windows: Wikipedia (en, ja), Hacker News, NASA APOD, earthquakes, ECB rates, the Bitcoin network, and a door to X search. window_time says, per window, when it is observed, published and revised, and how many days back it was visible at D 00:00 UTC (as_of_lag). Add &lat=&lon=&place= for the weather at one place",
+            "/window-series?w=attention|tx|hash|weather — every day's value of one numeric window (Wikipedia 'Bitcoin' views, Bitcoin transactions, hash rate, or the weather at &lat=&lon=&place=), kept 6 hours. The value on a day is what happened that day; at D 00:00 UTC only D − as_of_lag was out",
             "/probe/published — when yesterday's Wikipedia, Bitcoin-network and weather values first appeared (measured by the cron, for the AS OF view)",
             "/archive/status — what the archive holds, what is missing, recent errors",
             "/archive/step — do one unit of archive work now (build one missing year, or refresh the recent days)",
@@ -1649,6 +1731,7 @@ export default {
       if (p === "/probe/wiki") return out(await probeWiki());
       if (p === "/probe/wiki-top") return out(await probeWikiTop());
       if (p === "/scene") return await scene(env, url);
+      if (p === "/window-series") return await windowSeries(env, url);
       if (p === "/probe/gdelt") return out(await probeGdelt(url.searchParams.get("only")));
       if (p === "/probe/weather") return out(await probeWeather());
       if (p === "/probe/quakes") return out(await probeQuakes());
