@@ -126,8 +126,6 @@ async function boot() {
     return;
   }
   meta = series.meta || {};
-  $("day").min = ex.first;
-  $("day").max = ex.last;
   if (!S.day || S.day < ex.first || S.day > ex.last) S.day = ex.last;
   setupControls();
   renderFooter();
@@ -146,16 +144,12 @@ function setupControls() {
   for (const b of $("mode").querySelectorAll("button")) {
     b.addEventListener("click", () => { S.mode = b.dataset.mode; S.sel = 0; run(); });
   }
-  $("day").addEventListener("change", (e) => {
-    const v = e.target.value;
-    if (!v) return;
-    S.day = v < ex.first ? ex.first : v > ex.last ? ex.last : v;
-    S.sel = 0;
-    run();
-  });
-  $("latest").addEventListener("click", () => { S.day = ex.last; S.sel = 0; run(); });
+  // three wheels (year / month / day) that only offer days the archive has
+  for (const id of ["d-y", "d-m", "d-d"]) $(id).addEventListener("change", () => pickFromWheels(id));
   const tryBox = $("try");
-  tryBox.append(el("span", {}, "Try"));
+  const today = el("button", { type: "button", "data-day": ex.last }, "Today");
+  today.addEventListener("click", () => { S.day = ex.last; S.sel = 0; run(); });
+  tryBox.append(today);
   for (const d of TRY_DAYS) {
     if (d < ex.first || d > ex.last) continue;
     const b = el("button", { type: "button", "data-day": d }, d);
@@ -163,7 +157,7 @@ function setupControls() {
     tryBox.append(b);
   }
   for (const b of $("world-view").querySelectorAll("button")) {
-    b.addEventListener("click", () => { if (b.disabled) return; S.wv = b.dataset.wv; writeHash(); renderWorld(res.results[S.sel] || null); });
+    b.addEventListener("click", () => { if (b.disabled) return; S.wv = b.dataset.wv; S.wvAuto = false; writeHash(); renderWorld(res.results[S.sel] || null); });
   }
   const svgEl = $("chart");
   svgEl.addEventListener("pointerdown", (e) => pointAt(e));
@@ -194,8 +188,46 @@ function run() {
   writeHash();
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const daysIn = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
+function ymdParts(d) { return d.split("-").map(Number); }
+/* the months and days a wheel may offer, for the archive's first and last year */
+function wheelRange(y, m) {
+  const [fy, fm, fd] = ymdParts(ex.first), [ly, lm, ld] = ymdParts(ex.last);
+  const m0 = y === fy ? fm : 1, m1 = y === ly ? lm : 12;
+  const mm = Math.min(Math.max(m, m0), m1);
+  const d0 = y === fy && mm === fm ? fd : 1, d1 = y === ly && mm === lm ? ld : daysIn(y, mm);
+  return { fy, ly, m0, m1, mm, d0, d1 };
+}
+function fillSelect(sel, from, to, label, value) {
+  const key = `${from}-${to}`;
+  if (sel.dataset.key !== key) { // rebuild only when the choices change (a spinning wheel is left alone)
+    sel.textContent = "";
+    for (let v = from; v <= to; v++) sel.append(el("option", { value: v }, label(v)));
+    sel.dataset.key = key;
+  }
+  sel.value = String(value);
+}
+function renderWheels() {
+  const [y, m, d] = ymdParts(S.day);
+  const r = wheelRange(y, m);
+  fillSelect($("d-y"), r.fy, r.ly, String, y);
+  fillSelect($("d-m"), r.m0, r.m1, (v) => MONTHS[v - 1], r.mm);
+  fillSelect($("d-d"), r.d0, r.d1, String, Math.min(Math.max(d, r.d0), r.d1));
+}
+function pickFromWheels() {
+  const y = Number($("d-y").value);
+  const r = wheelRange(y, Number($("d-m").value));
+  const d = Math.min(Math.max(Number($("d-d").value), r.d0), r.d1);
+  const next = `${y}-${String(r.mm).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  if (next === S.day) return;
+  S.day = next;
+  S.sel = 0;
+  run();
+}
+
 function renderControls() {
-  $("day").value = S.day;
+  renderWheels();
   for (const b of $("try").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.day === S.day));
   for (const b of $("width").querySelectorAll("button")) {
     const w = Number(b.dataset.w);
@@ -252,9 +284,10 @@ function renderStatus() {
     return;
   }
   const n = res.results.length;
-  st.append(textWithDates("span", {}, n
+  const qc = n && res.results[0].coverage_days ? res.results[0].coverage_days.query : null;
+  st.append(textWithDates("span", {}, (n
     ? `BTC ${usd(q)} on ${S.day} · ${n} look-alike day${n === 1 ? "" : "s"} from ${int(res.candidates)} in its past`
-    : `BTC ${usd(q)} on ${S.day} · nothing in its past to compare yet`));
+    : `BTC ${usd(q)} on ${S.day} · nothing in its past to compare yet`) + (qc !== null && qc < 365 ? ` · short history: this day has only ${qc} days of past behind it` : "")));
   // the careful version lives in the drawer
   if (!res.searched) det.append(textWithDates("div", {}, `No past window ended by ${res.strict.last_candidate_end} (D − ${HORIZON} days). The archive starts on ${ex.first}; a past only counts if its ${HORIZON}-day replay had already happened on D.`));
   else det.append(textWithDates("div", {}, `Searched ${int(res.searched)} past windows that ended by ${res.strict.last_candidate_end} (D − ${HORIZON} days), so each replay had already happened on D.`));
@@ -287,6 +320,9 @@ function renderResults() {
       el("span", { class: "when" }, r.day),
       el("span", { class: "sim" }, r.similarity.toFixed(2)),
     );
+    // a day with less than a year behind it was measured on a shorter past: say so, don't hide it
+    const cov = r.coverage_days && r.coverage_days.candidate;
+    if (cov !== null && cov !== undefined && cov < 365) b.append(el("span", { class: "short" }, `short history · only ${cov} days of past behind it`));
     const bars = el("span", { class: "bars" });
     for (const [k, name] of BAR_WINDOWS) {
       const bar = el("span", { class: "bar", "data-w": k, "data-state": k === "market" ? "on" : "wait" });
@@ -442,7 +478,9 @@ async function worldSource(r) {
 }
 
 async function renderWorld(r) {
-  if (S.wv === "past" && !r) S.wv = "asof";
+  // with no look-alike day there is no past to show: look at D for now, and come back to the past when there is one
+  if (S.wv === "past" && !r) { S.wv = "asof"; S.wvAuto = true; }
+  else if (r && S.wvAuto) { S.wv = "past"; S.wvAuto = false; }
   $("world").style.display = "";
   for (const b of $("world-view").querySelectorAll("button")) {
     b.setAttribute("aria-pressed", String(b.dataset.wv === S.wv));

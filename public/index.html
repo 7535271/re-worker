@@ -280,14 +280,17 @@
   .hero { padding: 18px 2px 16px; }
   .hero h1 { margin: 0; font-size: 34px; line-height: 1; font-weight: 750; letter-spacing: -0.03em; }
   .hero .lede { margin: 10px 0 14px; font-size: 16px; line-height: 1.4; color: var(--ink-2); }
-  .pick { display: flex; gap: 8px; }
-  .pick input[type="date"] { height: 50px; font-size: 17px; font-weight: 600; background: var(--surface); }
-  .pick .btn { height: 50px; background: var(--surface); }
+  .pick { display: grid; grid-template-columns: 1.15fr 1fr 0.85fr; gap: 8px; }
+  .pick .sel { position: relative; display: block; }
+  .pick .sel::after { content: "▾"; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--muted); pointer-events: none; }
+  .pick select { -webkit-appearance: none; appearance: none; width: 100%; height: 52px; padding: 0 28px 0 14px; font: inherit; font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--ink); background: var(--surface); border: 0; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--ring); cursor: pointer; }
+  .pick select:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--series-d); }
   .try { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; font-size: 12px; color: var(--muted); }
   .try button { min-height: 34px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--wash); color: var(--ink-2); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
   .try button[aria-pressed="true"] { background: var(--on-bg); color: var(--on-ink); }
   h2 { margin: 0 0 12px; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
   .quiet { margin: 10px 2px 0; font-size: 12.5px; color: var(--muted); }
+  .result .short { grid-column: 2 / 4; font-size: 11.5px; color: var(--muted); margin-top: 1px; }
   .readout { margin: -4px 0 12px; font-size: 15px; color: var(--ink); }
   .readout .up, .readout .down { font-weight: 700; font-variant-numeric: tabular-nums; }
   .seg.mini { margin-bottom: 10px; }
@@ -324,11 +327,12 @@
   <header class="hero">
     <h1>RE:</h1>
     <p class="lede">Pick a day in Bitcoin's history. See the days that looked like it — and what came after them.</p>
-    <div class="pick">
-      <input id="day" type="date" aria-label="Pick a day">
-      <button id="latest" class="btn" type="button">Today</button>
+    <div class="pick" role="group" aria-label="Pick a day">
+      <label class="sel year"><span class="sr">Year</span><select id="d-y"></select></label>
+      <label class="sel month"><span class="sr">Month</span><select id="d-m"></select></label>
+      <label class="sel dd"><span class="sr">Day</span><select id="d-d"></select></label>
     </div>
-    <div id="try" class="try" role="group" aria-label="Days to try"></div>
+    <div id="try" class="try" role="group" aria-label="Days to jump to"></div>
   </header>
 
   <p id="status" class="status" aria-live="polite">Opening the archive…</p>
