@@ -187,6 +187,11 @@ function setupControls() {
   $("p-prev").addEventListener("click", () => go({ sel: S.sel - 1, open: null }, false));
   $("p-next").addEventListener("click", () => go({ sel: S.sel + 1, open: null }, false));
   $("stand").addEventListener("click", standHere);
+  // the mark: back to the day you stand on, keeping the path (unlike Today or a new date, which start a new path)
+  $("mark").addEventListener("click", () => {
+    if (S.view === "home") { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+    go({ view: "home", open: null });
+  });
   $("open-next").addEventListener("click", openNext);
   for (const b of $("d-view").querySelectorAll("button")) b.addEventListener("click", () => go({ dv: b.dataset.dv, open: null }, false));
   const svgEl = $("chart");
@@ -287,7 +292,7 @@ const niceDay = (d) => { const [y, m, dd] = ymdParts(d); return `${y} · ${MONTH
 
 /* ── 1. the day you stand on ── */
 function renderHome() {
-  renderTrail($("trail-home"));
+  renderTrail($("trail"));
   const [y, m, d] = ymdParts(S.day);
   $("h-yr").textContent = String(y);
   $("h-mo").textContent = MONTHS[m - 1].toUpperCase();
@@ -348,7 +353,7 @@ const limitFor = (r) => (r && r.later ? ex.last : S.day);
 const revealed = new Set(); // "D|that day" pairs whose "next" has been opened in this visit
 function renderPast() {
   const r = res.results[S.sel];
-  renderTrail($("trail-past"), r.day);
+  renderTrail($("trail"), r.day);
   $("p-title").textContent = niceDay(r.day);
   $("p-sub").textContent = r.later
     ? `Later in history. The market says this day felt like ${S.day}.`
@@ -551,7 +556,7 @@ const WORLD_NOTE = {
   hind: "What happened on this day, as we know it now. None of it could be seen at 00:00 UTC, and RE: never uses it to find look-alike days.",
 };
 function renderDay() {
-  renderTrail($("trail-day"));
+  renderTrail($("trail"));
   $("d-title").textContent = niceDay(S.day);
   for (const b of $("d-view").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.dv === S.dv));
   $("d-note").textContent = WORLD_NOTE[S.dv] + (S.dv === "hind" && S.day >= todayUTC() ? " This day is not over yet." : "");
@@ -799,6 +804,7 @@ function coverageNote(r) {
 
 /* ── 4. how it works, and the knobs ── */
 function renderHow() {
+  renderTrail($("trail"));
   for (const b of $("width").querySelectorAll("button")) {
     const w = Number(b.dataset.w);
     b.setAttribute("aria-pressed", String(w === S.width));

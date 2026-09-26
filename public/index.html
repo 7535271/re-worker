@@ -330,7 +330,7 @@
   .topline { display: flex; align-items: baseline; gap: 10px; padding: 14px 2px 0; min-height: 36px; }
   .topline { align-items: center; }
   /* capital letters have no descenders, so an even padding makes the tag look low: trim the line box to the letters where the browser can, and lift them by hand where it cannot */
-  .topline .mark { display: inline-block; padding: 6.5px 9px 3.5px; border-radius: 9px; background: var(--brand-bg); color: var(--plane); font-size: 19px; line-height: 1; font-weight: 800; letter-spacing: -0.02em; }
+  .topline .mark { border: 0; cursor: pointer; font-family: inherit; display: inline-block; padding: 6.5px 9px 3.5px; border-radius: 9px; background: var(--brand-bg); color: var(--plane); font-size: 19px; line-height: 1; font-weight: 800; letter-spacing: -0.02em; }
   @supports (text-box: trim-both cap alphabetic) {
     .topline .mark { text-box: trim-both cap alphabetic; padding: 7px 9px; }
   }
@@ -378,7 +378,8 @@
   .row-link:active { background: var(--wash); }
   .quiet-link { background: transparent; box-shadow: none; color: var(--ink-2); font-weight: 600; padding: 12px 4px; }
   #footer, #footer-how { margin-top: 14px; }
-  .bar { display: flex; align-items: center; gap: 10px; padding: 10px 0 0; min-height: 44px; }
+  .bar { display: flex; align-items: center; gap: 10px; padding: 2px 0 0; min-height: 40px; }
+  .topline .mark:active { transform: scale(0.95); }
   .back { flex: none; border: 0; background: none; padding: 8px 4px 8px 0; font: inherit; font-size: 16px; font-weight: 600; color: var(--series-d); cursor: pointer; }
   .day-head { padding: 10px 2px 4px; }
   .day-head h1 { margin: 0; font-size: 34px; line-height: 1.1; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
@@ -451,10 +452,14 @@
 </head>
 <body>
 <div class="page">
+  <!-- the same mark in the same place on every screen: tap it to go back to the day you stand on (the path is kept) -->
+  <header class="topline">
+    <button id="mark" class="mark" type="button" aria-label="RE: — back to the day you stand on">RE<span class="colon">:</span></button>
+    <nav id="trail" class="trail" aria-label="Where you have stood"></nav>
+  </header>
 
   <!-- 1. the day you stand on -->
   <main id="v-home" class="screen" aria-label="The day you stand on">
-    <div class="topline"><span class="mark" aria-label="RE:">RE<span class="colon">:</span></span><nav id="trail-home" class="trail" aria-label="Where you have stood"></nav></div>
     <section class="stage" aria-label="Pick a day">
       <label class="ov yr"><span id="h-yr" class="big-y"></span><select id="d-y" aria-label="Year"></select></label>
       <div class="md">
@@ -487,7 +492,7 @@
 
   <!-- 2. inside a day that looked like it -->
   <main id="v-past" class="screen" hidden aria-label="A day that looked like it">
-    <div class="bar"><button class="back" type="button">‹ Back</button><nav id="trail-past" class="trail" aria-label="Where you have stood"></nav></div>
+    <div class="bar"><button class="back" type="button">‹ Back</button></div>
     <header class="day-head">
       <h1 id="p-title"></h1>
       <p id="p-sub" class="sub"></p>
@@ -523,7 +528,7 @@
 
   <!-- 3. the day you stand on, seen through the windows -->
   <main id="v-day" class="screen" hidden aria-label="Look around this day">
-    <div class="bar"><button class="back" type="button">‹ Back</button><nav id="trail-day" class="trail" aria-label="Where you have stood"></nav></div>
+    <div class="bar"><button class="back" type="button">‹ Back</button></div>
     <header class="day-head">
       <h1 id="d-title"></h1>
       <p class="sub">The day you stand on</p>
