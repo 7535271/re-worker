@@ -18,7 +18,22 @@ const MODE_HINT = {
   TRAJECTORY: "How price, volume, volatility and Fear & Greed moved inside the window, from its first day.",
 };
 
-const S = { day: null, mode: "STATE", width: 7, off: new Set(), sel: 0 };
+const S = { day: null, mode: "STATE", width: 7, off: new Set(), sel: 0, wv: "asof", place: "tokyo" };
+const WORLD_VIEWS = ["asof", "hind", "past"];
+/* the weather window looks at one place, chosen by the viewer */
+const PLACES = [
+  { id: "tokyo", name: "Tokyo", lat: 35.68, lon: 139.69 },
+  { id: "new-york", name: "New York", lat: 40.71, lon: -74.01 },
+  { id: "london", name: "London", lat: 51.51, lon: -0.13 },
+  { id: "san-francisco", name: "San Francisco", lat: 37.77, lon: -122.42 },
+  { id: "singapore", name: "Singapore", lat: 1.35, lon: 103.82 },
+  { id: "hong-kong", name: "Hong Kong", lat: 22.32, lon: 114.17 },
+  { id: "seoul", name: "Seoul", lat: 37.57, lon: 126.98 },
+  { id: "sydney", name: "Sydney", lat: -33.87, lon: 151.21 },
+  { id: "sao-paulo", name: "São Paulo", lat: -23.55, lon: -46.63 },
+  { id: "lagos", name: "Lagos", lat: 6.52, lon: 3.38 },
+];
+const placeNow = () => PLACES.find((x) => x.id === S.place) || PLACES[0];
 let ex = null, meta = {}, res = null, view = null;
 
 /* ── formatting ── */
@@ -79,11 +94,15 @@ function readHash() {
   for (const k of (h.get("off") || "").split(",")) if (AXES.includes(k)) S.off.add(k);
   const s = Number(h.get("s"));
   if (Number.isInteger(s) && s >= 0 && s < 5) S.sel = s;
+  if (WORLD_VIEWS.includes(h.get("wv"))) S.wv = h.get("wv");
+  if (PLACES.some((x) => x.id === h.get("pl"))) S.place = h.get("pl");
 }
 function writeHash() {
   const parts = [`d=${S.day}`, `m=${S.mode}`, `w=${S.width}`];
   if (S.off.size) parts.push(`off=${[...S.off].join(",")}`);
   if (S.sel) parts.push(`s=${S.sel}`);
+  if (S.wv !== "asof") parts.push(`wv=${S.wv}`);
+  if (S.place !== PLACES[0].id) parts.push(`pl=${S.place}`);
   history.replaceState(null, "", "#" + parts.join("&"));
 }
 
@@ -133,6 +152,9 @@ function setupControls() {
     run();
   });
   $("latest").addEventListener("click", () => { S.day = ex.last; S.sel = 0; run(); });
+  for (const b of $("world-view").querySelectorAll("button")) {
+    b.addEventListener("click", () => { if (b.disabled) return; S.wv = b.dataset.wv; writeHash(); renderWorld(res.results[S.sel] || null); });
+  }
   const svgEl = $("chart");
   svgEl.addEventListener("pointerdown", (e) => pointAt(e));
   svgEl.addEventListener("pointermove", (e) => pointAt(e));
@@ -313,19 +335,22 @@ function renderReplay() {
 }
 
 /* ── the world that day: other windows onto the chosen past's event day (/scene) ── */
-const scenes = new Map(); // day → Promise<body>
+const scenes = new Map(); // "day|place" → Promise<body>
 let worldToken = 0;
 function loadScene(day) {
-  if (!scenes.has(day)) {
-    const p = fetch(`/scene?day=${day}`).then(async (r) => {
+  const pl = placeNow();
+  const key = `${day}|${pl.id}`;
+  if (!scenes.has(key)) {
+    const q = new URLSearchParams({ day, lat: String(pl.lat), lon: String(pl.lon), place: pl.name });
+    const p = fetch(`/scene?${q}`).then(async (r) => {
       const body = await r.json().catch(() => null);
       if (!r.ok || !body || !body.windows) throw new Error((body && body.error) || `HTTP ${r.status}`);
       return body;
     });
-    p.catch(() => scenes.delete(day)); // a failure is not remembered: the next look tries again
-    scenes.set(day, p);
+    p.catch(() => scenes.delete(key)); // a failure is not remembered: the next look tries again
+    scenes.set(key, p);
   }
-  return scenes.get(day);
+  return scenes.get(key);
 }
 function safeHref(u) {
   try { const x = new URL(u); return x.protocol === "https:" || x.protocol === "http:" ? x.href : null; } catch { return null; }
@@ -355,83 +380,181 @@ function absentLine(w) {
   return el("p", { class: "absent" }, `– ${w.reason || "no data for this day"}`);
 }
 
+function hashRate(th) {
+  if (th === null || th === undefined) return "—";
+  const units = [[1e6, "EH/s"], [1e3, "PH/s"], [1, "TH/s"], [1e-3, "GH/s"], [1e-6, "MH/s"], [1e-9, "kH/s"]];
+  for (const [f, u] of units) if (th >= f) return `${(th / f).toFixed(th / f >= 100 ? 0 : 1)} ${u}`;
+  return `${(th * 1e12).toFixed(0)} H/s`;
+}
+const todayUTC = () => new Date().toISOString().slice(0, 10);
+const WORLD_NOTE = {
+  asof: "Only what had been published by 00:00 UTC on D. Each window shows the newest day it had then — never D itself.",
+  hind: "What happened on D, as each source reports it today. None of it was visible at D 00:00 UTC, and RE: never uses it to find similar pasts.",
+  past: "The similar past ended at least 30 days before D, so all of this was already public on D — shown as each source reports it today.",
+};
+let worldShown = null;
+
+/* which day each window is read from, for the view in use */
+async function worldSource(r) {
+  if (S.wv === "past") { const sc = await loadScene(r.day); return (k) => ({ w: sc.windows[k], day: r.day, time: sc.window_time || {} }); }
+  if (S.wv === "hind") { const sc = await loadScene(S.day); return (k) => ({ w: sc.windows[k], day: S.day, time: sc.window_time || {} }); }
+  // AS OF: each window from D − its as_of_lag (the newest day that was already published at D 00:00)
+  const byLag = new Map();
+  const [s1, s2] = await Promise.all([loadScene(ymdOf(dayNum(S.day) - 1)), loadScene(ymdOf(dayNum(S.day) - 2))]);
+  byLag.set(1, s1); byLag.set(2, s2);
+  const time = s1.window_time || {};
+  const extra = [...new Set(Object.values(time).map((t) => t.as_of_lag).filter((l) => Number.isInteger(l) && l > 0 && !byLag.has(l)))];
+  const more = await Promise.all(extra.map((l) => loadScene(ymdOf(dayNum(S.day) - l))));
+  extra.forEach((l, i) => byLag.set(l, more[i]));
+  return (k) => {
+    const lag = time[k] && Number.isInteger(time[k].as_of_lag) && time[k].as_of_lag > 0 ? time[k].as_of_lag : 1;
+    const sc = byLag.get(lag);
+    return { w: sc.windows[k], day: ymdOf(dayNum(S.day) - lag), time };
+  };
+}
+
 async function renderWorld(r) {
-  const card = $("world");
-  card.style.display = r ? "" : "none";
-  if (!r) return;
+  if (S.wv === "past" && !r) S.wv = "asof";
+  for (const b of $("world-view").querySelectorAll("button")) {
+    b.setAttribute("aria-pressed", String(b.dataset.wv === S.wv));
+    if (b.dataset.wv === "past") { b.disabled = !r; b.textContent = r ? `Past ${S.sel + 1}` : "Past"; }
+  }
+  $("world").style.display = "";
+  const shownKey = (S.wv === "past" ? `past|${r.day}|${S.sel}` : `${S.wv}|${S.day}`) + `|${S.place}`;
+  if (shownKey === worldShown) return; // already on screen
+  worldShown = shownKey;
   const token = ++worldToken;
   const head = $("world-day");
   head.textContent = "";
-  head.append(el("span", { class: "k", style: "background:var(--series-sel)" }), textWithDates("span", {}, `Similar past ${S.sel + 1} · event day ${r.day}`));
+  const isD = S.wv !== "past";
+  head.append(el("span", { class: "k", style: `background:var(${isD ? "--series-d" : "--series-sel"})` }),
+    textWithDates("span", {}, S.wv === "asof" ? `D · ${S.day} · as of 00:00 UTC` : S.wv === "hind" ? `D · ${S.day} · in hindsight` : `Similar past ${S.sel + 1} · event day ${r.day}`));
+  $("world-note").textContent = WORLD_NOTE[S.wv] + (S.wv === "hind" && S.day >= todayUTC() ? " D is today, so the day is not over yet." : "");
   const box = $("world-body");
   box.textContent = "";
   box.append(el("p", { class: "note" }, "Looking through other windows…"));
   box.classList.add("loading");
-  let sc;
-  try { sc = await loadScene(r.day); } catch (e) {
+  let get;
+  try { get = await worldSource(r); } catch (e) {
     if (token !== worldToken) return;
+    worldShown = null; // not shown: the next look tries again
     box.classList.remove("loading");
     box.textContent = "";
-    box.append(el("p", { class: "note" }, `The other windows could not be reached this time (${e.message}). Choosing this past again will retry.`));
+    box.append(el("p", { class: "note" }, `The other windows could not be reached this time (${e.message}). Switching the view again will retry.`));
     return;
   }
   if (token !== worldToken) return; // the choice changed while this was loading
   box.classList.remove("loading");
   box.textContent = "";
-  const w = sc.windows;
+
+  // the label on the right of each window: in AS OF, first the day it shows
+  // the label on the right: in AS OF, first the day it shows; then the value status (Nova's second axis)
+  const VALUE_MARK = { current: "value today", revised: "revised later" };
+  const when = (k, day, extra, x) => {
+    const vs = x && x.state === "on" && get(k).time[k] ? VALUE_MARK[get(k).time[k].value_status] : null;
+    return [S.wv === "asof" ? day : null, extra, vs].filter(Boolean).join(" · ") || null;
+  };
+  const on = (x) => x && x.state === "on";
 
   const wiki = (key, title, n) => {
-    const x = w[key], b = winBox(title, x && x.state === "on" ? "most read · a day later" : null);
-    if (!x || x.state !== "on") b.append(absentLine(x || {}));
+    const { w: x, day } = get(key), b = winBox(title, when(key, day, on(x) ? "most read" : null, x));
+    if (!on(x)) b.append(absentLine(x || {}));
     else if (!x.items.length) b.append(absentLine({ reason: "no pages listed" }));
     else b.append(listOf(x.items.slice(0, n), (i) => i.title, (i) => int(i.views)));
     return b;
   };
   box.append(wiki("wikipedia_en", "Wikipedia · English", 5));
 
-  const hn = w.hacker_news, bh = winBox("Hacker News", hn && hn.state === "on" ? "top stories · points today" : null);
-  if (!hn || hn.state !== "on") bh.append(absentLine(hn || {}));
-  else if (!hn.items.length) bh.append(absentLine({ reason: "no stories that day" }));
-  else bh.append(listOf(hn.items.slice(0, 3), (i) => i.title, (i) => `${int(i.points)} pts`));
-  box.append(bh);
+  { const { w: hn, day } = get("hacker_news"), b = winBox("Hacker News", when("hacker_news", day, null, hn));
+    if (!on(hn)) b.append(absentLine(hn || {}));
+    else if (!hn.items.length) b.append(absentLine({ reason: "no stories that day" }));
+    else b.append(listOf(hn.items.slice(0, 3), (i) => i.title, (i) => `${int(i.points)} pts`));
+    box.append(b); }
 
-  const ap = w.apod, ba = winBox("NASA · Picture of the Day", null);
-  if (!ap || ap.state !== "on") ba.append(absentLine(ap || {}));
-  else {
-    const p = el("p", { class: "one" });
-    p.append(link(ap.page_url, ap.title || "(untitled)"));
-    ba.append(p);
-    if (ap.credit) ba.append(el("p", { class: "sub" }, ap.credit));
-  }
-  box.append(ba);
+  { const { w: ap, day } = get("apod"), b = winBox("NASA · Picture of the Day", when("apod", day, null, ap));
+    if (!on(ap)) b.append(absentLine(ap || {}));
+    else {
+      const p = el("p", { class: "one" });
+      p.append(link(ap.page_url, ap.title || "(untitled)"));
+      b.append(p);
+      if (ap.credit) b.append(el("p", { class: "sub" }, ap.credit));
+    }
+    box.append(b); }
 
-  const q = w.earthquakes, bq = winBox("Earthquakes · M4.5+", q && q.revised_later ? "revised later" : null);
-  if (!q || q.state !== "on") bq.append(absentLine(q || {}));
-  else {
-    bq.append(el("p", { class: "one" }, q.count_m45 === null ? "count unavailable" : `${int(q.count_m45)} on this UTC day`));
-    const big = (q.biggest || [])[0];
-    if (big) bq.append(el("p", { class: "sub" }, `Largest: M${Number(big.mag).toFixed(1)} · ${big.place || "unnamed place"}`));
-  }
-  box.append(bq);
+  { const { w: q, day } = get("earthquakes"), b = winBox("Earthquakes · M4.5+", when("earthquakes", day, null, q));
+    if (!on(q)) b.append(absentLine(q || {}));
+    else {
+      b.append(el("p", { class: "one" }, q.count_m45 === null ? "count unavailable" : `${int(q.count_m45)} on this UTC day`));
+      const big = (q.biggest || [])[0];
+      if (big) b.append(el("p", { class: "sub" }, `Largest: M${Number(big.mag).toFixed(1)} · ${big.place || "unnamed place"}`));
+    }
+    box.append(b); }
 
-  const fx = w.fx, bf = winBox("Exchange rates · ECB", null);
-  if (!fx || fx.state !== "on") bf.append(absentLine(fx || {}));
-  else {
-    const f = (v, d) => (v === null || v === undefined ? "—" : Number(v).toFixed(d));
-    bf.append(el("p", { class: "one" }, `1 USD = ${f(fx.usd_jpy, 2)} JPY · ${f(fx.usd_eur, 4)} EUR`));
-    if (fx.note) bf.append(textWithDates("p", { class: "sub" }, fx.note));
-  }
-  box.append(bf);
+  { const { w: fx, day } = get("fx"), b = winBox("Exchange rates · ECB", when("fx", day, null, fx));
+    if (!on(fx)) b.append(absentLine(fx || {}));
+    else {
+      const f = (v, d) => (v === null || v === undefined ? "—" : Number(v).toFixed(d));
+      b.append(el("p", { class: "one" }, `1 USD = ${f(fx.usd_jpy, 2)} JPY · ${f(fx.usd_eur, 4)} EUR`));
+      if (fx.note) b.append(textWithDates("p", { class: "sub" }, fx.note));
+    }
+    box.append(b); }
+
+  { const { w: bn, day } = get("bitcoin_network"), b = winBox("Bitcoin network", when("bitcoin_network", day, null, bn));
+    if (!on(bn)) b.append(absentLine(bn || {}));
+    else {
+      const vs = (c, what) => (c === null || c === undefined ? "" : ` · ${pct(c)} vs ${what}`);
+      b.append(el("p", { class: "one" }, bn.transactions === null ? `Transactions: ${bn.transactions_why || "—"}` : `${int(Math.round(bn.transactions))} transactions${vs(bn.transactions_change_7d, "a week before")}`));
+      b.append(el("p", { class: "sub" }, bn.hash_rate_avg7_th_s === null ? `Hash rate: ${bn.hash_rate_why || "—"}` : `Hash rate ${hashRate(bn.hash_rate_avg7_th_s)} (7-day average)${vs(bn.hash_rate_avg7_change, "the week before")}`));
+    }
+    box.append(b); }
+
+  { const { w: wx, day } = get("weather"), b = winBox("Weather", when("weather", day, null, wx));
+    const sel = el("select", { class: "place", "aria-label": "Place for the weather window" });
+    for (const pl of PLACES) { const o = el("option", { value: pl.id }, pl.name); if (pl.id === S.place) o.selected = true; sel.append(o); }
+    sel.addEventListener("change", () => { S.place = sel.value; writeHash(); worldShown = null; renderWorld(res.results[S.sel] || null); });
+    b.append(sel);
+    if (!on(wx)) b.append(absentLine(wx || {}));
+    else {
+      const t = (v) => (v === null || v === undefined ? "—" : `${Number(v).toFixed(1)}`);
+      const sky = wx.weather ? wx.weather[0].toUpperCase() + wx.weather.slice(1) : "—";
+      b.append(el("p", { class: "one" }, `${sky} · ${t(wx.temp_min_c)} to ${t(wx.temp_max_c)} °C`));
+      b.append(el("p", { class: "sub" }, `Rain ${t(wx.precipitation_mm)} mm · wind up to ${t(wx.wind_max_kmh)} km/h · UTC day`));
+    }
+    box.append(b); }
 
   box.append(wiki("wikipedia_ja", "Wikipedia · 日本語", 3));
 
-  const x = w.x, bx = winBox("X", "a door, not data");
-  if (x && x.url) {
-    const a = link(x.url, "Search X for “bitcoin” that day ↗");
-    a.className = "door";
-    bx.append(a);
+  { const { w: x, day } = get("x"), b = winBox("X", when("x", day, "a door, not data"));
+    if (x && x.url) {
+      const a = link(x.url, S.wv === "asof" ? "Search X for “bitcoin” up to D 00:00 ↗" : "Search X for “bitcoin” that day ↗");
+      a.className = "door";
+      b.append(a);
+    }
+    box.append(b); }
+
+  box.append(timeDetails(get("x").time));
+}
+
+/* each window's four times (Nova's window metadata), as a table-like list */
+const WINDOW_NAMES = { wikipedia_en: "Wikipedia · English", wikipedia_ja: "Wikipedia · 日本語", hacker_news: "Hacker News", apod: "NASA · Picture of the Day", earthquakes: "Earthquakes", fx: "Exchange rates · ECB", bitcoin_network: "Bitcoin network", weather: "Weather", x: "X" };
+const VALUE_STATUS = { as_published: "as published", current: "today's value", revised: "revised later — today's value" };
+function timeDetails(time) {
+  const d = el("details", { class: "times" });
+  d.append(el("summary", {}, "When each window knew what"));
+  d.append(el("p", {}, "A date on a window is not the moment the world could see it. For each window: when it happened, when it could be seen, when the data came out, and whether it changes later. AS OF uses only what had come out by D 00:00 UTC."));
+  for (const k of Object.keys(WINDOW_NAMES)) {
+    const t = time[k];
+    if (!t) continue;
+    const box = el("div", { class: "t" });
+    box.append(el("h4", {}, WINDOW_NAMES[k]));
+    const dl = el("dl");
+    for (const [label, v] of [["Happened", t.event], ["Seen", t.observation], ["Came out", t.publication], ["Changes later", t.revision], ["Value shown", VALUE_STATUS[t.value_status] || t.value_status], ["AS OF uses", `D − ${t.as_of_lag} day${t.as_of_lag === 1 ? "" : "s"}`]]) {
+      dl.append(el("dt", {}, label), el("dd", {}, v || "—"));
+    }
+    box.append(dl);
+    d.append(box);
   }
-  box.append(bx);
+  return d;
 }
 
 function niceTicks(lo, hi, count = 4) {
