@@ -49,6 +49,18 @@ function el(tag, attrs = {}, text) {
   if (text !== undefined) e.textContent = text;
   return e;
 }
+/* 日付（YYYY-MM-DD）は行の途中で折り返さない */
+function textWithDates(tag, attrs, text) {
+  const e = el(tag, attrs);
+  let last = 0;
+  for (const m of text.matchAll(/\d{4}-\d{2}-\d{2}/g)) {
+    if (m.index > last) e.append(document.createTextNode(text.slice(last, m.index)));
+    e.append(el("span", { style: "white-space:nowrap" }, m[0]));
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) e.append(document.createTextNode(text.slice(last)));
+  return e;
+}
 function svg(tag, attrs = {}, text) {
   const e = document.createElementNS(SVG, tag);
   for (const [k, v] of Object.entries(attrs)) if (v !== undefined && v !== null) e.setAttribute(k, String(v));
@@ -209,14 +221,17 @@ function renderStatus() {
     return;
   }
   const n = res.candidates;
-  if (n === 0) {
-    st.append(el("div", {}, `No past window ended by ${res.strict.last_candidate_end} (D − ${HORIZON} days) with enough history to compare. The archive starts on ${ex.first}; a past only counts if its ${HORIZON}-day replay had already happened on D.`));
+  if (!res.searched) {
+    st.append(textWithDates("div", {}, `No past window ended by ${res.strict.last_candidate_end} (D − ${HORIZON} days). The archive starts on ${ex.first}; a past only counts if its ${HORIZON}-day replay had already happened on D.`));
   } else {
-    st.append(el("div", {}, `Searched ${int(n)} past windows that ended by ${res.strict.last_candidate_end} (D − ${HORIZON} days), so each replay below had already happened on D.`));
+    st.append(textWithDates("div", {}, `Searched ${int(res.searched)} past windows that ended by ${res.strict.last_candidate_end} (D − ${HORIZON} days), so each replay below had already happened on D.`));
+    if (res.excluded) {
+      st.append(textWithDates("div", {}, `${int(n)} compared · ${int(res.excluded)} left out: less than half of D's axes (by weight) could be compared there.`));
+    }
   }
-  if (n > 0 && n < 365) st.append(el("div", { class: "note" }, "A small past: few windows existed before this day. That is part of what RE: observes here."));
+  if (n > 0 && n < 365) st.append(el("div", { class: "note" }, "A small past: few windows could be compared before this day. That is part of what RE: observes here."));
   if (meta.complete === false && meta.missing_years && meta.missing_years.length) {
-    st.append(el("div", { class: "note" }, `The archive is still filling (missing: ${meta.missing_years.join(", ")}). Results use what is stored so far.`));
+    st.append(textWithDates("div", { class: "note" }, `The archive is still filling (missing: ${meta.missing_years.join(", ")}). Results use what is stored so far.`));
   }
 }
 
@@ -232,7 +247,8 @@ function renderResults() {
   const box = $("results");
   box.textContent = "";
   if (!res.results.length) {
-    box.append(el("p", { class: "note" }, res.error ? "Nothing to compare for these conditions." : "No past window could be compared under these conditions."));
+    box.append(el("p", { class: "note" }, res.error ? "Nothing to compare for these conditions."
+      : res.searched ? "Every past window was left out: none had at least half of D's axes to compare." : "No past window could be compared under these conditions."));
     return;
   }
   res.results.forEach((r, i) => {

@@ -27,6 +27,8 @@
    ── 軸の三状態 ──
    ON = データがあって使う / OFF = データはあるがユーザーが閉じた / ABSENT = データが無い
    比べる2つの両方にある軸だけを使い、重みを合計 100% に配り直す。
+   ただし D で比べられる軸の重みのうち、半分以上を比べられた過去だけを候補にする。
+   外した過去の数は隠さずに返す（excluded）。
    ────────────────────────────────────────── */
 
 export const DAY = 86400000;
@@ -67,6 +69,7 @@ export const HORIZON = 30;                         // STRICT：候補のリプ�
 export const REPLAY_OFFSETS = [-7, -1, 0, 1, 3, 7, 14, 30];
 export const WIDTHS = [1, 7, 15, 30];
 export const MIN_SHARE = 0.8;                      // 窓の 8 割以上で値がそろった軸だけ比べる
+export const MIN_WEIGHT_SHARE = 0.5;               // D で比べられる軸の重みのうち、半分以上を比べられた過去だけを候補にする
 
 /* ── 日付（1970-01-01 から何日目か。worker.js と同じやり方） ── */
 export function dayNum(ymd) {
@@ -249,7 +252,7 @@ function stateDistance(st, q, c, w, axes, weights) {
     sw += wt;
     sd += wt * d;
   }
-  return sw > 0 ? { d: sd / sw, used } : null;
+  return sw > 0 ? { d: sd / sw, used, sw } : null;
 }
 
 function trajDistance(qTraj, tl, c, w, axes, weights, buf) {
@@ -274,7 +277,7 @@ function trajDistance(qTraj, tl, c, w, axes, weights, buf) {
     sw += wt;
     sd += wt * d;
   }
-  return sw > 0 ? { d: sd / sw, used } : null;
+  return sw > 0 ? { d: sd / sw, used, sw } : null;
 }
 
 /* STATE の coverage：使った軸のうち、正規化に使えた過去が一番短かった日数 */
@@ -300,15 +303,17 @@ export function search(tl, st, opts) {
   const list = mode === "TRAJECTORY" ? TRAJ_AXES : STATE_AXES;
   const presence = axisPresence(tl, st, mode, q, w);
   const wanted = list.filter((k) => (opts.axes ? opts.axes[k] !== false : true));
-  const axes = wanted.filter((k) => presence[k] === "on");
+  const axes = wanted.filter((k) => presence[k] === "on" && (weights[k] ?? 1) > 0);
+  const totalWeight = axes.reduce((s, k) => s + (weights[k] ?? 1), 0);
 
   const base = {
     query: { day: dayAt(tl, q), index: q, window: [dayAt(tl, q - w + 1), dayAt(tl, q)] },
     mode, width: w, horizon: H, axes_used_for_query: axes, presence,
     strict: { rule: "candidate_end + horizon <= D", last_candidate_end: dayAt(tl, q - H) },
+    rule: { min_weight_share: MIN_WEIGHT_SHARE },
   };
-  if (q < 0 || q >= tl.n) return { ...base, error: "that day is outside the archive", results: [], candidates: 0 };
-  if (!axes.length) return { ...base, error: "no axis can be observed for this window", results: [], candidates: 0 };
+  if (q < 0 || q >= tl.n) return { ...base, error: "that day is outside the archive", results: [], candidates: 0, searched: 0, excluded: 0 };
+  if (!axes.length) return { ...base, error: "no axis can be observed for this window", results: [], candidates: 0, searched: 0, excluded: 0 };
 
   let qTraj = null;
   if (mode === "TRAJECTORY") {
@@ -316,14 +321,20 @@ export function search(tl, st, opts) {
     for (const k of axes) qTraj[k] = trajectory(tl, k, q, w);
   }
 
+  // STRICT の範囲の窓はすべて調べる（searched）。
+  // D で比べられる軸の重みのうち、半分未満しか比べられない過去は外して数える（excluded）。
+  // 1軸だけで比べた過去が、8軸で比べた過去と同じ順位表に並ばないように（2026-09-26、ノヴァと決定）
   const scored = [];
   const buf = new Float64Array(w);
   const lastEnd = q - H;
+  let searched = 0, excluded = 0;
   for (let c = w - 1; c <= lastEnd; c++) {
+    searched++;
     const r = mode === "TRAJECTORY"
       ? trajDistance(qTraj, tl, c, w, axes, weights, buf)
       : stateDistance(st, q, c, w, axes, weights);
-    if (r) scored.push({ c, d: r.d, used: r.used });
+    if (!r || r.sw + 1e-9 < MIN_WEIGHT_SHARE * totalWeight) { excluded++; continue; }
+    scored.push({ c, d: r.d, used: r.used });
   }
   scored.sort((a, b) => a.d - b.d || b.c - a.c);
 
@@ -350,7 +361,7 @@ export function search(tl, st, opts) {
     }
     return out;
   });
-  return { ...base, candidates: scored.length, results };
+  return { ...base, searched, excluded, candidates: scored.length, results };
 }
 
 /* ── リプレイ：出来事の日（i）を 0 として、−7d … +30d に何が起きたか ──
