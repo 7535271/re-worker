@@ -396,13 +396,38 @@
   .opened .alike { flex-wrap: wrap; }
   .opened .alike .meter { flex: 0 0 72px; max-width: 72px; }
   .opened h4 { margin: 12px 0 4px; font-size: 12px; font-weight: 700; color: var(--muted); }
-  .primary { display: block; width: 100%; margin-top: 22px; height: 52px; border: 0; border-radius: 14px; background: var(--on-bg); color: var(--on-ink); font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
+  .primary { display: block; width: 100%; margin-top: 22px; height: 52px; border: 0; border-radius: 14px; background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
   .primary:active { transform: scale(0.98); }
   .center { text-align: center; }
   #d-view { margin-top: 12px; }
   .how-title { margin: 8px 2px 14px; font-size: 28px; font-weight: 800; }
   .card h3 { margin: 0 0 10px; font-size: 16px; font-weight: 700; }
   .card.explain p { font-size: 13px; color: var(--ink-2); margin: 6px 0; }
+  .howto { list-style: none; counter-reset: step; margin: 16px auto 0; padding: 0; display: inline-flex; flex-direction: column; gap: 4px; text-align: left; font-size: 14px; color: var(--ink-2); }
+  .howto li { counter-increment: step; display: flex; gap: 8px; align-items: baseline; }
+  .howto li::before { content: counter(step); flex: none; width: 18px; height: 18px; border-radius: 999px; background: var(--wash); color: var(--ink); font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; transform: translateY(-1px); }
+  .row .go { color: var(--muted); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .obs { margin-top: 18px; }
+  .obs-t { display: flex; flex-direction: column; text-align: left; }
+  .obs-t small { margin-top: 2px; font-size: 12.5px; font-weight: 500; color: var(--muted); }
+  .lead { margin: -2px 2px 10px; font-size: 14px; color: var(--ink-2); }
+  .pairkey { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0 2px 10px; font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .pairkey span { display: inline-flex; align-items: center; gap: 6px; }
+  .pairkey i { display: inline-block; width: 10px; height: 10px; border-radius: 999px; }
+  .tile .two { display: flex; flex-direction: column; gap: 3px; }
+  .tile .two span { display: flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 650; font-variant-numeric: tabular-nums; min-width: 0; }
+  .tile .two span em { font-style: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .two i, .side h5 i { flex: none; display: inline-block; width: 8px; height: 8px; border-radius: 999px; }
+  .side { padding: 10px 0 2px; }
+  .side + .side { border-top: 1px solid var(--grid); margin-top: 8px; }
+  .side h5 { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 12px; font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .side h5 small { font-weight: 500; color: var(--muted); }
+  .seal { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 100%; min-height: 96px; border: 0; border-radius: 16px; background: var(--on-bg); color: var(--on-ink); font: inherit; font-size: 17px; font-weight: 750; cursor: pointer; }
+  .seal small { font-size: 12.5px; font-weight: 500; opacity: 0.7; }
+  .seal:active { transform: scale(0.98); }
+  .seal[hidden] { display: none; }
+  .row-link .obs-t { color: var(--ink); font-size: 15px; line-height: 1.3; }
+  #next-body { animation: rise 0.3s ease-out both; }
   footer { font-size: 12px; color: var(--muted); padding: 6px 2px; }
   footer a { color: var(--ink-2); }
   .loading { opacity: 0.55; transition: opacity 0.15s; }
@@ -427,18 +452,21 @@
         <button id="latest" type="button">Today</button>
         <button id="next-day" type="button" aria-label="The day after">›</button>
       </div>
-      <p class="hidden-line">From this day, what comes next is hidden.</p>
+      <ol class="howto">
+        <li>Find a day that felt like this one.</li>
+        <li>Step into it — was it really alike?</li>
+        <li>Then open what happened next.</li>
+      </ol>
       <div id="try" class="try" role="group" aria-label="Days to try"></div>
     </section>
 
     <section class="list" aria-label="Days that looked like it">
-      <div class="list-head"><h2>Days that looked like it</h2><span id="found" class="quiet-inline"></span></div>
+      <div class="list-head"><h2>Go somewhere similar</h2><span id="found" class="quiet-inline"></span></div>
       <div id="status" aria-live="polite"></div>
       <div id="results" class="rows"></div>
     </section>
 
-    <button id="look" class="row-link" type="button">Look around this day <span aria-hidden="true">›</span></button>
-    <button id="how-link" class="row-link quiet-link" type="button">How RE: works <span aria-hidden="true">›</span></button>
+    <button id="how-link" class="row-link obs" type="button"><span class="obs-t">Observatory<small>Every number behind RE:, window by window</small></span><span aria-hidden="true">›</span></button>
     <footer id="footer"></footer>
   </main>
 
@@ -452,21 +480,26 @@
       <div class="pnav"><button id="p-prev" type="button">‹ Previous</button><button id="p-next" type="button">Next ›</button></div>
     </header>
 
-    <section class="block" aria-label="What came after">
-      <h2>What came after</h2>
-      <div id="checks" class="checks"></div>
-      <div id="legend" class="legend"></div>
-      <div class="chart-wrap">
-        <svg id="chart" viewBox="0 0 360 230" role="img" tabindex="0" aria-label="Price change around the day"></svg>
-        <div id="tip" class="tip" aria-hidden="true"></div>
-      </div>
-      <p id="p-hidden" class="quiet"></p>
-    </section>
-
-    <section class="block" aria-label="The world that day">
-      <h2>The world that day</h2>
+    <section class="block" aria-label="Was it really alike?">
+      <h2>Was it really alike?</h2>
+      <p class="lead">The market says these two days felt the same. Look at both through the same windows, as each looked at 00:00 UTC.</p>
+      <div class="pairkey"><span><i style="background:var(--series-d)"></i><b id="k-d"></b> your day</span><span><i style="background:var(--series-sel)"></i><b id="k-p"></b> that day</span></div>
       <div id="p-tiles" class="tiles"></div>
       <div id="p-open" class="opened" aria-live="polite"></div>
+    </section>
+
+    <section class="block" aria-label="What happened next">
+      <h2>What happened next?</h2>
+      <button id="open-next" class="seal" type="button"><span>Open what happened next</span><small id="seal-note"></small></button>
+      <div id="next-body" hidden>
+        <div id="checks" class="checks"></div>
+        <div id="legend" class="legend"></div>
+        <div class="chart-wrap">
+          <svg id="chart" viewBox="0 0 360 230" role="img" tabindex="0" aria-label="Price change around the day"></svg>
+          <div id="tip" class="tip" aria-hidden="true"></div>
+        </div>
+        <p id="p-hidden" class="quiet"></p>
+      </div>
     </section>
 
     <button id="stand" class="primary" type="button"></button>
@@ -494,7 +527,9 @@
   <!-- 4. how it works, and the knobs -->
   <main id="v-how" class="screen" hidden aria-label="How RE: works">
     <div class="bar"><button class="back" type="button">‹ Back</button></div>
-    <h1 class="how-title">How RE: works</h1>
+    <h1 class="how-title">Observatory</h1>
+    <p class="lead" style="margin:-6px 2px 14px">Everything behind the day you stand on: the numbers, how alike each window looks, when each window knew what.</p>
+    <button id="look" class="row-link" type="button" style="margin:0 0 12px">Your day through every window <span aria-hidden="true">›</span></button>
 
     <section class="card">
       <h3>Look differently</h3>
