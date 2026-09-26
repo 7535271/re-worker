@@ -1,4 +1,6 @@
-/* RE: — the page. Reads /series once, then every observation is computed here in the browser. */
+/* RE: — the page. Reads /series once, then every observation is computed here in the browser.
+   One layer at a time (2026-09-27, with Nova): the day you stand on → a day that looked like it →
+   what came after it and the world that day. The knobs and the method live on their own screen. */
 import { createExplorer, AXES, STATE_AXES, TRAJ_AXES, WIDTHS, HORIZON, REPLAY_OFFSETS, dayNum, ymdOf, asOfColumn, rangeState, mean7, windowSimilarity } from "./engine.js";
 
 const $ = (id) => document.getElementById(id);
@@ -11,17 +13,16 @@ const LABEL = {
 };
 const ABSENT_WHY = {
   sentiment: "Fear & Greed has no value for this window (the index starts on 2023-06-29, and new days reach CMC's history with a delay).",
-  attention: "Attention has no source connected yet.",
 };
 const MODE_HINT = {
   STATE: "Where each part of the market stood within its own past year, as seen on each day of the window (STATE).",
   TRAJECTORY: "How price, volume, volatility and Fear & Greed moved inside the window, from its first day (TRAJECTORY).",
 };
 
-const S = { day: null, mode: "STATE", width: 7, off: new Set(), sel: 0, wv: "past", place: "tokyo" };
+const VIEWS = ["home", "past", "day", "how"];
+const S = { day: null, mode: "STATE", width: 7, off: new Set(), sel: 0, place: "tokyo", view: "home", dv: "asof", open: null };
 /* days to try first (from the conversation with Nova): the March 2020 crash, the December 2017 top, the FTX collapse */
 const TRY_DAYS = ["2020-03-12", "2017-12-17", "2022-11-09"];
-const WORLD_VIEWS = ["asof", "hind", "past"];
 /* the weather window looks at one place, chosen by the viewer */
 const PLACES = [
   { id: "tokyo", name: "Tokyo", lat: 35.68, lon: 139.69 },
@@ -37,6 +38,8 @@ const PLACES = [
 ];
 const placeNow = () => PLACES.find((x) => x.id === S.place) || PLACES[0];
 let ex = null, meta = {}, res = null, view = null;
+/* the days you have stood on, in order ("2020-03-12 → 2013-09-08 → …"). A new start clears it */
+let trail = [];
 
 /* ── formatting ── */
 const MINUS = "−";
@@ -85,27 +88,39 @@ function svg(tag, attrs = {}, text) {
   return e;
 }
 
-/* ── the URL remembers the observation (so a view can be shared or reopened) ── */
+
+
+/* ── the URL remembers where you are (so a view can be shared, reopened, and the back swipe works) ── */
 function readHash() {
   const h = new URLSearchParams(location.hash.slice(1));
   const d = h.get("d");
   if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) S.day = d;
-  if (h.get("m") === "TRAJECTORY" || h.get("m") === "STATE") S.mode = h.get("m");
+  S.mode = h.get("m") === "TRAJECTORY" ? "TRAJECTORY" : "STATE";
   const w = Number(h.get("w"));
-  if (WIDTHS.includes(w)) S.width = w;
+  S.width = WIDTHS.includes(w) ? w : 7;
+  S.off = new Set();
   for (const k of (h.get("off") || "").split(",")) if (AXES.includes(k)) S.off.add(k);
   const s = Number(h.get("s"));
-  if (Number.isInteger(s) && s >= 0 && s < 5) S.sel = s;
-  if (WORLD_VIEWS.includes(h.get("wv"))) S.wv = h.get("wv");
-  if (PLACES.some((x) => x.id === h.get("pl"))) S.place = h.get("pl");
+  S.sel = Number.isInteger(s) && s >= 0 && s < 5 ? s : 0;
+  S.place = PLACES.some((x) => x.id === h.get("pl")) ? h.get("pl") : PLACES[0].id;
+  S.view = VIEWS.includes(h.get("v")) ? h.get("v") : "home";
+  S.dv = h.get("dv") === "hind" ? "hind" : "asof";
+  S.open = h.get("o") || null;
+  const t = (h.get("t") || "").split(",").filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x));
+  trail = t.length ? t : [];
 }
-function writeHash() {
-  const parts = [`d=${S.day}`, `m=${S.mode}`, `w=${S.width}`];
+function writeHash(push = false) {
+  const parts = [`d=${S.day}`];
+  if (S.mode !== "STATE") parts.push(`m=${S.mode}`);
+  if (S.width !== 7) parts.push(`w=${S.width}`);
   if (S.off.size) parts.push(`off=${[...S.off].join(",")}`);
   if (S.sel) parts.push(`s=${S.sel}`);
-  if (S.wv !== "past") parts.push(`wv=${S.wv}`);
   if (S.place !== PLACES[0].id) parts.push(`pl=${S.place}`);
-  history.replaceState(null, "", "#" + parts.join("&"));
+  if (S.view !== "home") parts.push(`v=${S.view}`);
+  if (S.view === "day" && S.dv !== "asof") parts.push(`dv=${S.dv}`);
+  if (S.open) parts.push(`o=${S.open}`);
+  if (trail.length > 1) parts.push(`t=${trail.join(",")}`);
+  history[push ? "pushState" : "replaceState"]({ re: true }, "", "#" + parts.join("&"));
 }
 
 /* ── start ── */
@@ -121,17 +136,28 @@ async function boot() {
   } catch (e) {
     const st = $("status");
     st.textContent = "";
-    st.append(el("div", { class: "error" },
-      `The archive could not be loaded yet (${e.message}). It fills itself every hour; progress is at /archive/status.`));
+    st.append(el("div", { class: "error" }, `The archive could not be loaded yet (${e.message}). It fills itself every hour; progress is at /archive/status.`));
     return;
   }
   meta = series.meta || {};
   if (!S.day || S.day < ex.first || S.day > ex.last) S.day = ex.last;
+  if (!trail.length || trail[trail.length - 1] !== S.day) trail = [S.day];
   setupControls();
   renderFooter();
-  run();
+  run(false);
+  writeHash(false);
+  // the back swipe (and the browser's back button) walks back through the screens
+  window.addEventListener("popstate", () => {
+    const place = S.place; // the chosen place stays chosen while you walk back
+    readHash();
+    if (!new URLSearchParams(location.hash.slice(1)).has("pl")) S.place = place;
+    if (S.day < ex.first || S.day > ex.last) S.day = ex.last;
+    if (!trail.length) trail = [S.day];
+    run(false);
+    if (S.place !== PLACES[0].id) writeHash(false);
+  });
   let t;
-  window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(() => view && drawChart(), 120); });
+  window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(() => { if (view && S.view === "past") { view.animate = false; drawChart(); } }, 120); });
 }
 
 function setupControls() {
@@ -141,24 +167,27 @@ function setupControls() {
     b.addEventListener("click", () => { S.width = w; S.sel = 0; run(); });
     wbox.append(b);
   }
-  for (const b of $("mode").querySelectorAll("button")) {
-    b.addEventListener("click", () => { S.mode = b.dataset.mode; S.sel = 0; run(); });
-  }
-  // three wheels (year / month / day) that only offer days the archive has
+  for (const b of $("mode").querySelectorAll("button")) b.addEventListener("click", () => { S.mode = b.dataset.mode; S.sel = 0; run(); });
+  // the big date: each part has an invisible wheel on top, holding only days the archive has
   for (const id of ["d-y", "d-m", "d-d"]) $(id).addEventListener("change", () => pickFromWheels(id));
+  $("prev-day").addEventListener("click", () => stepDay(-1));
+  $("next-day").addEventListener("click", () => stepDay(1));
+  $("latest").addEventListener("click", () => setDay(ex.last));
   const tryBox = $("try");
-  const today = el("button", { type: "button", "data-day": ex.last }, "Today");
-  today.addEventListener("click", () => { S.day = ex.last; S.sel = 0; run(); });
-  tryBox.append(today);
+  tryBox.append(el("span", {}, "Try"));
   for (const d of TRY_DAYS) {
     if (d < ex.first || d > ex.last) continue;
     const b = el("button", { type: "button", "data-day": d }, d);
-    b.addEventListener("click", () => { S.day = d; S.sel = 0; run(); });
+    b.addEventListener("click", () => setDay(d));
     tryBox.append(b);
   }
-  for (const b of $("world-view").querySelectorAll("button")) {
-    b.addEventListener("click", () => { if (b.disabled) return; S.wv = b.dataset.wv; S.wvAuto = false; writeHash(); renderWorld(res.results[S.sel] || null); });
-  }
+  $("look").addEventListener("click", () => go({ view: "day", open: null }));
+  $("how-link").addEventListener("click", () => go({ view: "how", open: null }));
+  for (const b of document.querySelectorAll(".back")) b.addEventListener("click", back);
+  $("p-prev").addEventListener("click", () => go({ sel: S.sel - 1, open: null }, false));
+  $("p-next").addEventListener("click", () => go({ sel: S.sel + 1, open: null }, false));
+  $("stand").addEventListener("click", standHere);
+  for (const b of $("d-view").querySelectorAll("button")) b.addEventListener("click", () => go({ dv: b.dataset.dv, open: null }, false));
   const svgEl = $("chart");
   svgEl.addEventListener("pointerdown", (e) => pointAt(e));
   svgEl.addEventListener("pointermove", (e) => pointAt(e));
@@ -174,20 +203,484 @@ function setupControls() {
   svgEl.addEventListener("blur", hideTip);
 }
 
+/* ── moving around ── */
+let shownView = null;
+function go(patch, push = true) {
+  Object.assign(S, patch);
+  render();
+  writeHash(push);
+}
+function back() {
+  if (history.state && history.state.re && history.length > 1 && S.view !== "home") history.back();
+  else go({ view: "home", open: null }, false);
+}
+function setDay(d, keepTrail = false) {
+  S.day = d < ex.first ? ex.first : d > ex.last ? ex.last : d;
+  S.sel = 0;
+  S.open = null;
+  if (!keepTrail) trail = [S.day];
+  run();
+}
+function stepDay(k) {
+  setDay(ymdOf(dayNum(S.day) + k));
+}
+/* stand on a day that looked like it: it becomes the new D, and the path grows */
+function standHere() {
+  const r = res.results[S.sel];
+  if (!r) return;
+  const at = trail.indexOf(S.day);
+  trail = (at >= 0 ? trail.slice(0, at + 1) : [S.day]).concat(r.day);
+  S.day = r.day;
+  S.sel = 0;
+  S.view = "home";
+  S.open = null;
+  run(false);
+  writeHash(true);
+}
+
 /* ── one observation ── */
-function run() {
+function run(write = true) {
   if (S.mode === "TRAJECTORY" && S.width < 2) S.width = 7;
   const axes = {};
   for (const k of AXES) axes[k] = !S.off.has(k);
   res = ex.search({ day: S.day, mode: S.mode, width: S.width, axes, top: 5 });
   if (S.sel >= res.results.length) S.sel = 0;
-  renderControls();
-  renderStatus();
-  renderResults();
-  renderReplay();
-  writeHash();
+  if (S.view === "past" && !res.results.length) S.view = "home";
+  render();
+  if (write) writeHash(false);
+}
+function render() {
+  if (S.view === "past" && !res.results[S.sel]) S.view = "home";
+  for (const v of VIEWS) $(`v-${v}`).hidden = v !== S.view;
+  if (shownView !== S.view) { window.scrollTo(0, 0); shownView = S.view; }
+  if (S.view === "home") renderHome();
+  else if (S.view === "past") renderPast();
+  else if (S.view === "day") renderDay();
+  else renderHow();
 }
 
+/* the path you walked: tap a day to stand on it again */
+function renderTrail(box, extra) {
+  box.textContent = "";
+  const items = trail.length > 1 || extra ? trail.slice() : [];
+  items.forEach((d, i) => {
+    if (i) box.append(el("span", { class: "arrow", "aria-hidden": "true" }, "→"));
+    const b = el("button", { type: "button", "aria-current": String(d === S.day && !extra) }, d);
+    b.addEventListener("click", () => {
+      trail = trail.slice(0, i + 1);
+      S.day = d; S.sel = 0; S.view = "home"; S.open = null;
+      run(false); writeHash(true);
+    });
+    box.append(b);
+  });
+  if (extra) { box.append(el("span", { class: "arrow", "aria-hidden": "true" }, "→"), el("span", {}, extra)); }
+}
+
+/* a day with a thin past: say which kind, and how many days were there */
+function histTag(cov, day) {
+  if (cov === null || cov === undefined || cov >= 365) return null;
+  const since = dayNum(day) - dayNum(ex.first) + 1;
+  return since < 365 ? `short history · ${cov} days available` : `incomplete history · ${cov}/365 days available`;
+}
+const niceDay = (d) => { const [y, m, dd] = ymdParts(d); return `${y} · ${MONTHS[m - 1]} ${String(dd).padStart(2, "0")}`; };
+
+/* ── 1. the day you stand on ── */
+function renderHome() {
+  renderTrail($("trail-home"));
+  const [y, m, d] = ymdParts(S.day);
+  $("h-yr").textContent = String(y);
+  $("h-mo").textContent = MONTHS[m - 1].toUpperCase();
+  $("h-dd").textContent = String(d);
+  renderWheels();
+  const q = dayNum(S.day) - ex.tl.d0;
+  const pr = $("h-price");
+  pr.textContent = "";
+  pr.append(document.createTextNode(`BTC ${usd(ex.tl.axes.price[q])}`), el("small", {}, "at 00:00 UTC that day"));
+  const qc = res.results.length && res.results[0].coverage_days ? res.results[0].coverage_days.query : null;
+  const qt = histTag(qc, S.day);
+  if (qt) pr.append(el("span", { class: "hist" }, qt));
+  $("prev-day").disabled = S.day <= ex.first;
+  $("next-day").disabled = S.day >= ex.last;
+  $("latest").setAttribute("aria-pressed", String(S.day === ex.last));
+  for (const b of $("try").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.day === S.day));
+
+  const st = $("status");
+  st.textContent = "";
+  $("found").textContent = "";
+  const box = $("results");
+  box.textContent = "";
+  if (res.error) {
+    const why = res.error === "no axis can be observed for this window"
+      ? (S.off.size ? "Nothing is left to compare — turn something back on in How RE: works." : "There is too little past before this day. Try a later one.")
+      : res.error;
+    box.append(el("p", { class: "empty" }, why));
+    return;
+  }
+  if (!res.results.length) {
+    box.append(el("p", { class: "empty" }, res.searched ? "Every past day was left out: none had at least half of this day's axes to compare." : "There is no earlier day to compare with yet."));
+    return;
+  }
+  $("found").textContent = `${res.results.length} of ${int(res.candidates)} days before it`;
+  res.results.forEach((r, i) => {
+    const b = el("button", { type: "button", class: "row", style: `animation-delay:${i * 0.04}s`, "aria-label": `${r.day}, ${r.similarity.toFixed(2)} alike` });
+    const [ry] = ymdParts(r.day);
+    const when = el("span", { class: "when" });
+    when.append(el("small", {}, String(ry)), document.createTextNode(niceDay(r.day).slice(7)));
+    b.append(when, el("span", { class: "sim" }, r.similarity.toFixed(2)), el("span", { class: "chev", "aria-hidden": "true" }, "›"));
+    const tag = histTag(r.coverage_days && r.coverage_days.candidate, r.day);
+    if (tag) b.append(el("span", { class: "hist" }, tag));
+    b.addEventListener("click", () => { if (view) view.animate = true; go({ view: "past", sel: i, open: null }); });
+    box.append(b);
+  });
+}
+
+/* ── 2. inside a day that looked like it ── */
+function renderPast() {
+  const r = res.results[S.sel];
+  renderTrail($("trail-past"), r.day);
+  $("p-title").textContent = niceDay(r.day);
+  $("p-sub").textContent = `Looked like ${S.day} · ${r.similarity.toFixed(2)} alike`;
+  $("p-hist").textContent = histTag(r.coverage_days && r.coverage_days.candidate, r.day) || "";
+  $("p-prev").disabled = S.sel <= 0;
+  $("p-next").disabled = S.sel >= res.results.length - 1;
+
+  // what came after it (this day's own "after" is allowed; D's is not)
+  const D = ex.replay(S.day, S.day);
+  const selRep = ex.replay(r.day, S.day);
+  const checks = $("checks");
+  checks.textContent = "";
+  for (const o of [1, 7, HORIZON]) {
+    const p = selRep.points.find((x) => x.offset === o);
+    const c = el("div", { class: "check" });
+    c.append(el("b", {}, p && p.state === "seen" ? pct(p.change) : "—"), el("small", {}, o === 1 ? "1 day later" : `${o} days later`));
+    checks.append(c);
+  }
+  const series = [];
+  res.results.forEach((x, i) => { if (i !== S.sel) series.push({ kind: "context", name: `${i + 1}. ${x.day}`, rep: ex.replay(x.day, S.day) }); });
+  series.push({ kind: "d", name: `D · ${S.day}`, rep: D });
+  series.push({ kind: "sel", name: `${S.sel + 1}. ${r.day}`, rep: selRep });
+  const animate = !view || view.animate !== false ? true : false;
+  view = { series, lo: REPLAY_OFFSETS[0], hi: REPLAY_OFFSETS[REPLAY_OFFSETS.length - 1], cursor: null, animate };
+  const lg = $("legend");
+  lg.textContent = "";
+  const key = (color, text) => { const s = el("span"); s.append(el("i", { style: `background:var(${color})` }), document.createTextNode(text)); return s; };
+  lg.append(key("--series-sel", r.day), key("--series-d", `${S.day} (your day)`));
+  if (res.results.length > 1) lg.append(key("--context", "the other look-alikes"));
+  drawChart();
+  view.animate = false;
+  $("p-hidden").textContent = `What came after ${S.day} stays hidden: on that day, nobody knew it yet.`;
+
+  // the world that day, window by window
+  renderTiles("p", { kind: "past", r });
+  $("stand").textContent = `Stand on ${r.day}`;
+  $("stand-note").textContent = "It becomes your day, and RE: looks for the days that looked like it.";
+}
+
+/* ── 3. the day you stand on, seen through the windows ── */
+const WORLD_NOTE = {
+  asof: "What the world could already see at 00:00 UTC on this day. Each window shows the newest day it had then — never the day itself.",
+  hind: "What happened on this day, as we know it now. None of it could be seen at 00:00 UTC, and RE: never uses it to find look-alike days.",
+};
+function renderDay() {
+  renderTrail($("trail-day"));
+  $("d-title").textContent = niceDay(S.day);
+  for (const b of $("d-view").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.dv === S.dv));
+  $("d-note").textContent = WORLD_NOTE[S.dv] + (S.dv === "hind" && S.day >= todayUTC() ? " This day is not over yet." : "");
+  renderTiles("d", { kind: S.dv });
+}
+
+/* ── the nine windows of a day ──
+   Each tile shows a glimpse; tap it to open that window. Only one is open at a time. */
+const TILES = [
+  { k: "market", name: "Market" },
+  { k: "attention", name: "Attention" },
+  { k: "weather", name: "Weather" },
+  { k: "network", name: "Network" },
+  { k: "hn", name: "Hacker News" },
+  { k: "sky", name: "Sky" },
+  { k: "earth", name: "Earth" },
+  { k: "money", name: "Money" },
+  { k: "x", name: "X" },
+];
+let tileToken = 0;
+/* which day each scene window is read from, for this view */
+async function sceneSource(ctx) {
+  if (ctx.kind === "past") { const sc = await loadScene(ctx.r.day); return (k) => ({ w: sc.windows[k], day: ctx.r.day, time: sc.window_time || {} }); }
+  if (ctx.kind === "hind") { const sc = await loadScene(S.day); return (k) => ({ w: sc.windows[k], day: S.day, time: sc.window_time || {} }); }
+  // as seen at 00:00: each window from D − its as_of_lag (the newest day already out)
+  const byLag = new Map();
+  const [s1, s2] = await Promise.all([loadScene(ymdOf(dayNum(S.day) - 1)), loadScene(ymdOf(dayNum(S.day) - 2))]);
+  byLag.set(1, s1); byLag.set(2, s2);
+  const time = s1.window_time || {};
+  const extra = [...new Set(Object.values(time).map((t) => t.as_of_lag).filter((l) => Number.isInteger(l) && l > 0 && !byLag.has(l)))];
+  const more = await Promise.all(extra.map((l) => loadScene(ymdOf(dayNum(S.day) - l))));
+  extra.forEach((l, i) => byLag.set(l, more[i]));
+  return (k) => {
+    const lag = time[k] && Number.isInteger(time[k].as_of_lag) && time[k].as_of_lag > 0 ? time[k].as_of_lag : 1;
+    return { w: byLag.get(lag).windows[k], day: ymdOf(dayNum(S.day) - lag), time };
+  };
+}
+const on = (x) => x && x.state === "on";
+const VALUE_MARK = { current: "value today", revised: "revised later" };
+async function renderTiles(prefix, ctx) {
+  const grid = $(`${prefix}-tiles`), openBox = $(`${prefix}-open`);
+  const token = ++tileToken;
+  const q = dayNum(S.day) - ex.tl.d0;
+  // draw the tiles at once (glimpses fill in as the windows answer)
+  const draw = (get, comps) => {
+    grid.textContent = "";
+    TILES.forEach((t, i) => {
+      const b = el("button", { type: "button", class: "tile", "data-k": t.k, "aria-expanded": String(S.open === t.k), style: `animation-delay:${i * 0.03}s` });
+      const g = glimpse(t.k, ctx, get, comps, q);
+      b.append(el("span", { class: "tn" }, t.name), el("span", { class: `tt${g.dim ? " dim" : ""}` }, g.text));
+      b.addEventListener("click", () => go({ open: S.open === t.k ? null : t.k }, false));
+      grid.append(b);
+    });
+    openBox.textContent = "";
+    if (S.open && get) {
+      const w = openWindow(S.open, ctx, get, comps, q);
+      if (w) openBox.append(w);
+    }
+  };
+  draw(null, {});
+  let get = null;
+  const comps = {};
+  const tasks = [sceneSource(ctx).then((g) => { get = g; }).catch((e) => { get = () => ({ w: { state: "absent", reason: `could not be read this time (${e.message})` }, day: S.day, time: {} }); })];
+  for (const k of ["attention", "weather", "network"]) tasks.push(windowComps(k).then((c) => { comps[k] = c; }).catch(() => { comps[k] = null; }));
+  await Promise.allSettled(tasks);
+  if (token !== tileToken) return;
+  draw(get, comps);
+}
+function alikeOf(k, ctx, comps, q) {
+  if (ctx.kind !== "past") return undefined;
+  if (k === "market") return ctx.r.similarity;
+  const W = comps[k];
+  if (!W) return null;
+  const s = windowSimilarity(W.comps, q, ctx.r.index, res.width);
+  return s ? s.similarity : null;
+}
+function glimpse(k, ctx, get, comps, q) {
+  const wait = { text: "…", dim: true };
+  const alike = alikeOf(k, ctx, comps, q);
+  const alikeText = alike === undefined ? null : alike === null ? "–" : `${alike.toFixed(2)} alike`;
+  if (k === "market") return ctx.kind === "past" ? { text: alikeText } : { text: usdShort(ex.tl.axes.price[q]) };
+  if (k === "attention") {
+    if (ctx.kind === "past") return comps.attention === undefined ? wait : { text: alikeText, dim: alike === null };
+    const W = comps.attention;
+    return W === undefined ? wait : W && !Number.isNaN(W.raw.views[q]) ? { text: `${compact(W.raw.views[q])} views` } : { text: "not open yet", dim: true };
+  }
+  if (k === "network") {
+    if (ctx.kind === "past") return comps.network === undefined ? wait : { text: alikeText, dim: alike === null };
+    const W = comps.network;
+    return W === undefined ? wait : W && !Number.isNaN(W.raw.tx[q]) ? { text: `${compact(W.raw.tx[q])} tx` } : { text: "–", dim: true };
+  }
+  if (!get) return wait;
+  const { w } = get(k === "hn" ? "hacker_news" : k === "sky" ? "apod" : k === "earth" ? "earthquakes" : k === "money" ? "fx" : k);
+  if (k === "x") return { text: "search ↗" };
+  if (!on(w)) return { text: "–", dim: true };
+  if (k === "weather") return { text: `${w.weather ? w.weather[0].toUpperCase() + w.weather.slice(1) : "—"} · ${Math.round(w.temp_max_c)}°` };
+  if (k === "hn") return w.items.length ? { text: w.items[0].title } : { text: "–", dim: true };
+  if (k === "sky") return { text: w.title || "(untitled)" };
+  if (k === "earth") return { text: w.count_m45 === null ? "–" : `${int(w.count_m45)} quakes` };
+  if (k === "money") return { text: w.usd_jpy === null ? "–" : `¥${Number(w.usd_jpy).toFixed(2)}` };
+  return { text: "–", dim: true };
+}
+function alikeLine(v, what) {
+  const p = el("p", { class: "alike" });
+  if (v === undefined) return null;
+  if (v === null) { p.append(document.createTextNode(`No ${what} to compare with your day.`)); return p; }
+  const m = el("span", { class: "meter", "aria-hidden": "true" });
+  m.append(el("i", { style: `width:${Math.max(0, Math.min(1, v)) * 100}%` }));
+  p.append(el("b", {}, v.toFixed(2)), m, document.createTextNode(`alike to ${S.day} through this window`));
+  return p;
+}
+function openWindow(k, ctx, get, comps, q) {
+  const alike = alikeOf(k, ctx, comps, q);
+  const label = (key, day, x) => {
+    const t = get(key).time[key];
+    const vs = x && on(x) && t ? VALUE_MARK[t.value_status] : null;
+    return [ctx.kind === "asof" ? `shows ${day}` : null, vs].filter(Boolean).join(" · ") || null;
+  };
+  if (k === "market") {
+    const b = winBox("Market", ctx.kind === "past" ? "found by RE:" : null);
+    const idx = ctx.kind === "past" ? ctx.r.index : q;
+    b.append(el("p", { class: "one" }, `BTC ${usd(ex.tl.axes.price[idx])} at 00:00 UTC`));
+    if (ctx.kind === "past") {
+      b.append(alikeLine(alike, "market"));
+      b.append(el("h4", {}, "Why it matched"));
+      const why = el("div", { class: "why" });
+      for (const [a, v] of Object.entries(ctx.r.axes).sort((x, y) => y[1] - x[1])) {
+        const m = el("span", { class: "meter", "aria-hidden": "true" });
+        m.append(el("i", { style: `width:${Math.max(0, Math.min(1, v)) * 100}%` }));
+        why.append(el("span", { class: "n" }, LABEL[a]), m, el("span", { class: "v" }, v.toFixed(2)));
+      }
+      b.append(why);
+    }
+    return b;
+  }
+  if (k === "attention") {
+    const b = winBox("Attention", null);
+    const W = comps.attention;
+    const idx = ctx.kind === "past" ? ctx.r.index : q;
+    if (W && !Number.isNaN(W.raw.views[idx])) b.append(el("p", { class: "one" }, `${int(W.raw.views[idx])} views of the English Wikipedia article “Bitcoin”`), el("p", { class: "sub" }, `the day's count that had come out by 00:00 UTC (${W.lag} days back)`));
+    const a = alikeLine(alike, "Wikipedia count");
+    if (a) b.append(a);
+    for (const [key, title, n] of [["wikipedia_en", "Most read · English Wikipedia", 5], ["wikipedia_ja", "Most read · Japanese Wikipedia", 3]]) {
+      const { w, day } = get(key);
+      const h = el("h4", {}, [title, label(key, day, w)].filter(Boolean).join(" · "));
+      b.append(h);
+      if (!on(w)) b.append(absentLine(w || {}));
+      else if (!w.items.length) b.append(absentLine({ reason: "no pages listed" }));
+      else b.append(listOf(w.items.slice(0, n), (i) => i.title, (i) => int(i.views)));
+    }
+    return b;
+  }
+  if (k === "weather") {
+    const { w, day } = get("weather");
+    const b = winBox("Weather", label("weather", day, w));
+    const sel = el("select", { class: "place", "aria-label": "Place for the weather window" });
+    for (const pl of PLACES) { const o = el("option", { value: pl.id }, pl.name); if (pl.id === S.place) o.selected = true; sel.append(o); }
+    sel.addEventListener("change", () => { S.place = sel.value; render(); writeHash(false); });
+    b.append(sel);
+    if (!on(w)) b.append(absentLine(w || {}));
+    else {
+      const t = (v) => (v === null || v === undefined ? "—" : `${Number(v).toFixed(1)}`);
+      b.append(el("p", { class: "one" }, `${w.weather ? w.weather[0].toUpperCase() + w.weather.slice(1) : "—"} · ${t(w.temp_min_c)} to ${t(w.temp_max_c)} °C`));
+      b.append(el("p", { class: "sub" }, `Rain ${t(w.precipitation_mm)} mm · wind up to ${t(w.wind_max_kmh)} km/h · UTC day`));
+    }
+    const a = alikeLine(alike, "weather");
+    if (a) b.append(a);
+    return b;
+  }
+  if (k === "network") {
+    const { w: bn, day } = get("bitcoin_network");
+    const b = winBox("Bitcoin network", label("bitcoin_network", day, bn));
+    if (!on(bn)) b.append(absentLine(bn || {}));
+    else {
+      const vs = (c, what) => (c === null || c === undefined ? "" : ` · ${pct(c)} vs ${what}`);
+      b.append(el("p", { class: "one" }, bn.transactions === null ? `Transactions: ${bn.transactions_why || "—"}` : `${int(Math.round(bn.transactions))} transactions${vs(bn.transactions_change_7d, "a week before")}`));
+      b.append(el("p", { class: "sub" }, bn.hash_rate_avg7_th_s === null ? `Hash rate: ${bn.hash_rate_why || "—"}` : `Hash rate ${hashRate(bn.hash_rate_avg7_th_s)} (7-day average)${vs(bn.hash_rate_avg7_change, "the week before")}`));
+    }
+    const a = alikeLine(alike, "network count");
+    if (a) b.append(a);
+    return b;
+  }
+  if (k === "hn") {
+    const { w: hn, day } = get("hacker_news");
+    const b = winBox("Hacker News", label("hacker_news", day, hn));
+    if (!on(hn)) b.append(absentLine(hn || {}));
+    else if (!hn.items.length) b.append(absentLine({ reason: "no stories that day" }));
+    else b.append(listOf(hn.items.slice(0, 5), (i) => i.title, (i) => `${int(i.points)} pts`));
+    return b;
+  }
+  if (k === "sky") {
+    const { w: ap, day } = get("apod");
+    const b = winBox("Sky · NASA Picture of the Day", label("apod", day, ap));
+    if (!on(ap)) b.append(absentLine(ap || {}));
+    else {
+      const p = el("p", { class: "one" });
+      p.append(link(ap.page_url, ap.title || "(untitled)"));
+      b.append(p);
+      if (ap.credit) b.append(el("p", { class: "sub" }, ap.credit));
+    }
+    return b;
+  }
+  if (k === "earth") {
+    const { w: eq, day } = get("earthquakes");
+    const b = winBox("Earth · earthquakes M4.5+", label("earthquakes", day, eq));
+    if (!on(eq)) b.append(absentLine(eq || {}));
+    else {
+      b.append(el("p", { class: "one" }, eq.count_m45 === null ? "count unavailable" : `${int(eq.count_m45)} on this UTC day`));
+      const big = (eq.biggest || [])[0];
+      if (big) b.append(el("p", { class: "sub" }, `Largest: M${Number(big.mag).toFixed(1)} · ${big.place || "unnamed place"}`));
+    }
+    return b;
+  }
+  if (k === "money") {
+    const { w: fx, day } = get("fx");
+    const b = winBox("Money · ECB rates", label("fx", day, fx));
+    if (!on(fx)) b.append(absentLine(fx || {}));
+    else {
+      const f = (v, d) => (v === null || v === undefined ? "—" : Number(v).toFixed(d));
+      b.append(el("p", { class: "one" }, `1 USD = ${f(fx.usd_jpy, 2)} JPY · ${f(fx.usd_eur, 4)} EUR`));
+      if (fx.note) b.append(textWithDates("p", { class: "sub" }, fx.note));
+    }
+    return b;
+  }
+  if (k === "x") {
+    const { w: x, day } = get("x");
+    const b = winBox("X", label("x", day, x) || "a door, not data");
+    if (x && x.url) {
+      const a = link(x.url, ctx.kind === "asof" ? "Search X for “bitcoin” up to 00:00 ↗" : "Search X for “bitcoin” that day ↗");
+      a.className = "door";
+      b.append(a);
+    }
+    return b;
+  }
+  return null;
+}
+
+function coverageNote(r) {
+  if (!r || !r.coverage_days) return null;
+  const parts = [];
+  if (r.coverage_days.candidate !== null && r.coverage_days.candidate < 365) parts.push(`this past day: ${r.coverage_days.candidate} days`);
+  if (r.coverage_days.query !== null && r.coverage_days.query < 365) parts.push(`D: ${r.coverage_days.query} days`);
+  return parts.length ? `scaled on less than a full year (${parts.join(", ")})` : null;
+}
+
+/* ── 4. how it works, and the knobs ── */
+function renderHow() {
+  for (const b of $("width").querySelectorAll("button")) {
+    const w = Number(b.dataset.w);
+    b.setAttribute("aria-pressed", String(w === S.width));
+    b.disabled = S.mode === "TRAJECTORY" && w < 2;
+  }
+  for (const b of $("mode").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.mode === S.mode));
+  $("mode-hint").textContent = MODE_HINT[S.mode];
+  const box = $("chips");
+  box.textContent = "";
+  // "attention" is a place kept in the market engine; the Attention window lives with the other windows
+  const list = (S.mode === "TRAJECTORY" ? TRAJ_AXES : STATE_AXES).filter((k) => k !== "attention");
+  for (const k of list) {
+    const absent = res.presence[k] === "absent";
+    const state = absent ? "absent" : S.off.has(k) ? "off" : "on";
+    const b = el("button", { type: "button", class: "chip", "data-state": state, "aria-pressed": absent ? undefined : String(state === "on"), "aria-disabled": absent ? "true" : undefined, title: absent ? (ABSENT_WHY[k] || `${LABEL[k]} has no data for this window.`) : `Tap to turn ${state === "on" ? "off" : "on"}` });
+    b.append(el("span", { class: "mark", "aria-hidden": "true" }, state === "on" ? "●" : state === "off" ? "○" : "–"), document.createTextNode(LABEL[k]));
+    if (!absent) b.addEventListener("click", () => { S.off.has(k) ? S.off.delete(k) : S.off.add(k); S.sel = 0; run(); });
+    box.append(b);
+  }
+  const why = $("absent-why");
+  why.textContent = "";
+  for (const k of list) {
+    if (res.presence[k] !== "absent") continue;
+    let reason;
+    if (k === "sentiment") {
+      const from = meta.fng_from || "2023-06-29";
+      const lastF = (meta.last_on || {}).sentiment;
+      if (S.day < from) reason = `the index starts on ${from}`;
+      else if (lastF && S.day > lastF) reason = `the value for ${S.day} is not in CMC's history yet (new days arrive there with a delay)`;
+      else reason = "not enough values in this window";
+    } else reason = "less than 30 days of past to scale it, or no values in this window";
+    why.append(el("div", {}, `– ${LABEL[k]}: ${reason}`));
+  }
+
+  const det = $("status-detail");
+  det.textContent = "";
+  if (res.error) det.append(el("div", {}, res.error));
+  else if (!res.searched) det.append(textWithDates("div", {}, `No past window ended by ${res.strict.last_candidate_end} (D − ${HORIZON} days). The archive starts on ${ex.first}; a past only counts if its ${HORIZON}-day replay had already happened on D.`));
+  else det.append(textWithDates("div", {}, `D = ${S.day}. Searched ${int(res.searched)} past windows that ended by ${res.strict.last_candidate_end} (D − ${HORIZON} days), so each replay had already happened on D.`));
+  if (res.excluded) det.append(textWithDates("div", {}, `${int(res.candidates)} compared · ${int(res.excluded)} left out: less than half of D's axes (by weight) could be compared there.`));
+  if (meta.complete === false && meta.missing_years && meta.missing_years.length) det.append(textWithDates("div", { class: "note" }, `The archive is still filling (missing: ${meta.missing_years.join(", ")}). Results use what is stored so far.`));
+  const r = res.results[S.sel] || null;
+  renderTable(ex.replay(S.day, S.day), r ? ex.replay(r.day, S.day) : null, r);
+  renderWhy(r);
+  renderCompare();
+  const times = $("times");
+  times.textContent = "";
+  loadScene(ymdOf(dayNum(S.day) - 1)).then((sc) => { if (S.view === "how") { times.textContent = ""; times.append(timeDetails(sc.window_time || {}, true)); } }).catch(() => {});
+}
+
+/* ── wheels for the big date ── */
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const daysIn = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
 function ymdParts(d) { return d.split("-").map(Number); }
@@ -221,184 +714,11 @@ function pickFromWheels() {
   const d = Math.min(Math.max(Number($("d-d").value), r.d0), r.d1);
   const next = `${y}-${String(r.mm).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   if (next === S.day) return;
-  S.day = next;
-  S.sel = 0;
-  run();
+  setDay(next);
 }
 
-function renderControls() {
-  renderWheels();
-  for (const b of $("try").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.day === S.day));
-  for (const b of $("width").querySelectorAll("button")) {
-    const w = Number(b.dataset.w);
-    b.setAttribute("aria-pressed", String(w === S.width));
-    b.disabled = S.mode === "TRAJECTORY" && w < 2;
-  }
-  for (const b of $("mode").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.mode === S.mode));
-  $("mode-hint").textContent = MODE_HINT[S.mode];
 
-  const box = $("chips");
-  box.textContent = "";
-  // "attention" is a place kept in the market engine; the Attention window lives in its own column now
-  const list = (S.mode === "TRAJECTORY" ? TRAJ_AXES : STATE_AXES).filter((k) => k !== "attention");
-  for (const k of list) {
-    const absent = res.presence[k] === "absent";
-    const state = absent ? "absent" : S.off.has(k) ? "off" : "on";
-    const b = el("button", {
-      type: "button", class: "chip", "data-state": state,
-      "aria-pressed": absent ? undefined : String(state === "on"),
-      "aria-disabled": absent ? "true" : undefined,
-      title: absent ? (ABSENT_WHY[k] || `${LABEL[k]} has no data for this window.`) : `Tap to turn ${state === "on" ? "off" : "on"}`,
-    });
-    b.append(el("span", { class: "mark", "aria-hidden": "true" }, state === "on" ? "●" : state === "off" ? "○" : "–"), document.createTextNode(LABEL[k]));
-    if (!absent) b.addEventListener("click", () => { S.off.has(k) ? S.off.delete(k) : S.off.add(k); S.sel = 0; run(); });
-    box.append(b);
-  }
-  // title は iPhone では出ないので、ABSENT の理由は文字で出す
-  const why = $("absent-why");
-  why.textContent = "";
-  for (const k of list) {
-    if (res.presence[k] !== "absent") continue;
-    let reason;
-    if (k === "attention") reason = "no source connected yet";
-    else if (k === "sentiment") {
-      const from = meta.fng_from || "2023-06-29";
-      const lastF = (meta.last_on || {}).sentiment;
-      if (S.day < from) reason = `the index starts on ${from}`;
-      else if (lastF && S.day > lastF) reason = `the value for ${S.day} is not in CMC's history yet (new days arrive there with a delay)`;
-      else reason = "not enough values in this window";
-    } else reason = "less than 30 days of past to scale it, or no values in this window";
-    why.append(el("div", {}, `– ${LABEL[k]}: ${reason}`));
-  }
-}
-
-function renderStatus() {
-  const st = $("status"), det = $("status-detail");
-  st.textContent = ""; det.textContent = "";
-  const q = ex.tl.axes.price[dayNum(S.day) - ex.tl.d0];
-  if (res.error) {
-    const why = res.error === "no axis can be observed for this window"
-      ? (S.off.size ? "Nothing is left to compare — turn something back on under Adjust." : "There is too little past before this day. Try a later one.")
-      : res.error;
-    st.append(el("div", { class: "error" }, why));
-    return;
-  }
-  const n = res.results.length;
-  const qc = n && res.results[0].coverage_days ? res.results[0].coverage_days.query : null;
-  st.append(textWithDates("span", {}, (n
-    ? `BTC ${usd(q)} on ${S.day} · ${n} look-alike day${n === 1 ? "" : "s"} from ${int(res.candidates)} in its past`
-    : `BTC ${usd(q)} on ${S.day} · nothing in its past to compare yet`) + (qc !== null && qc < 365 ? ` · short history: this day has only ${qc} days of past behind it` : "")));
-  // the careful version lives in the drawer
-  if (!res.searched) det.append(textWithDates("div", {}, `No past window ended by ${res.strict.last_candidate_end} (D − ${HORIZON} days). The archive starts on ${ex.first}; a past only counts if its ${HORIZON}-day replay had already happened on D.`));
-  else det.append(textWithDates("div", {}, `Searched ${int(res.searched)} past windows that ended by ${res.strict.last_candidate_end} (D − ${HORIZON} days), so each replay had already happened on D.`));
-  if (res.excluded) det.append(textWithDates("div", {}, `${int(res.candidates)} compared · ${int(res.excluded)} left out: less than half of D's axes (by weight) could be compared there.`));
-  if (res.candidates > 0 && res.candidates < 365) det.append(el("div", { class: "note" }, "A small past: few windows could be compared before this day. That is part of what RE: observes here."));
-  if (meta.complete === false && meta.missing_years && meta.missing_years.length) det.append(textWithDates("div", { class: "note" }, `The archive is still filling (missing: ${meta.missing_years.join(", ")}). Results use what is stored so far.`));
-}
-
-function coverageNote(r) {
-  if (!r.coverage_days) return null;
-  const parts = [];
-  if (r.coverage_days.candidate !== null && r.coverage_days.candidate < 365) parts.push(`this past: ${r.coverage_days.candidate} days`);
-  if (r.coverage_days.query !== null && r.coverage_days.query < 365) parts.push(`D: ${r.coverage_days.query} days`);
-  return parts.length ? `scaled on less than a year (${parts.join(", ")})` : null;
-}
-
-const BAR_WINDOWS = [["market", "Market"], ["attention", "Attention"], ["weather", "Weather"], ["network", "Network"]];
-function renderResults() {
-  const box = $("results");
-  box.textContent = "";
-  if (!res.results.length) {
-    box.append(el("p", { class: "note" }, res.error ? "Nothing to compare for these conditions."
-      : res.searched ? "Every past day was left out: none had at least half of D's axes to compare." : "There is no earlier day to compare with yet."));
-    return;
-  }
-  res.results.forEach((r, i) => {
-    const b = el("button", { type: "button", class: "result", "data-i": i, "aria-pressed": String(i === S.sel), "aria-label": `Past ${i + 1}: ${r.day}, market similarity ${r.similarity}` });
-    b.append(
-      el("i", { class: "key", "aria-hidden": "true" }),
-      el("span", { class: "when" }, r.day),
-      el("span", { class: "sim" }, r.similarity.toFixed(2)),
-    );
-    // a day with less than a year behind it was measured on a shorter past: say so, don't hide it
-    const cov = r.coverage_days && r.coverage_days.candidate;
-    if (cov !== null && cov !== undefined && cov < 365) b.append(el("span", { class: "short" }, `short history · only ${cov} days of past behind it`));
-    const bars = el("span", { class: "bars" });
-    for (const [k, name] of BAR_WINDOWS) {
-      const bar = el("span", { class: "bar", "data-w": k, "data-state": k === "market" ? "on" : "wait" });
-      const m = el("span", { class: "meter", "aria-hidden": "true" });
-      m.append(el("i", { style: `width:${k === "market" ? Math.max(0, Math.min(1, r.similarity)) * 100 : 0}%` }));
-      bar.append(m, el("small", {}, name));
-      bars.append(bar);
-    }
-    b.append(bars);
-    b.addEventListener("click", () => {
-      S.sel = i;
-      renderResults();
-      renderReplay();
-      writeHash();
-      $("replay").scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-    box.append(b);
-  });
-}
-/* fill a result's window bar (from the comparison) */
-function setBar(i, k, v) {
-  const bar = document.querySelector(`#results .result[data-i="${i}"] .bar[data-w="${k}"]`);
-  if (!bar) return;
-  bar.dataset.state = v === null ? "none" : v === undefined ? "wait" : "on";
-  bar.querySelector(".meter > i").style.width = `${v ? Math.max(0, Math.min(1, v)) * 100 : 0}%`;
-  bar.title = v === null || v === undefined ? "" : v.toFixed(2);
-}
-
-/* ── replay: chart, checkpoint table, why ── */
-function renderReplay() {
-  const picker = $("picker");
-  picker.textContent = "";
-  picker.style.display = res.results.length > 1 ? "" : "none";
-  res.results.forEach((r, i) => {
-    const b = el("button", { type: "button", "aria-pressed": String(i === S.sel), "aria-label": `Replay past ${i + 1}, ${r.day}` }, String(i + 1));
-    b.addEventListener("click", () => { S.sel = i; renderResults(); renderReplay(); writeHash(); });
-    picker.append(b);
-  });
-
-  const r = res.results[S.sel] || null;
-  const D = ex.replay(S.day, S.day);
-  const series = [];
-  res.results.forEach((x, i) => {
-    if (i === S.sel) return;
-    series.push({ kind: "context", name: `${i + 1}. ${x.day}`, rep: ex.replay(x.day, S.day) });
-  });
-  const selRep = r ? ex.replay(r.day, S.day) : null;
-  series.push({ kind: "d", name: `D · ${S.day}`, rep: D });
-  if (r) series.push({ kind: "sel", name: `${S.sel + 1}. ${r.day}`, rep: selRep });
-  view = { series, lo: REPLAY_OFFSETS[0], hi: REPLAY_OFFSETS[REPLAY_OFFSETS.length - 1], cursor: null };
-
-  const lg = $("legend");
-  lg.textContent = "";
-  const key = (color, text) => { const s = el("span"); s.append(el("i", { style: `background:var(${color})` }), document.createTextNode(text)); return s; };
-  lg.append(key("--series-d", `D · ${S.day}`));
-  if (r) lg.append(key("--series-sel", `Past ${S.sel + 1} · ${r.day}`));
-  if (res.results.length > 1) lg.append(key("--context", "The other look-alikes"));
-
-  // one sentence first: what followed the chosen day
-  const ro = $("readout");
-  ro.textContent = "";
-  const p30 = selRep ? selRep.points.find((p) => p.offset === HORIZON) : null;
-  if (r && p30 && p30.state === "seen" && p30.change !== null) {
-    ro.append(document.createTextNode(`${HORIZON} days after ${r.day}, BTC was `), el("span", { class: p30.change >= 0 ? "up" : "down" }, pct(p30.change)), document.createTextNode(". What follows D is not shown — on D, nobody knew it yet."));
-  } else if (r) {
-    ro.append(document.createTextNode("What follows D is not shown — on D, nobody knew it yet."));
-  }
-
-  drawChart();
-  renderTable(D, selRep, r);
-  renderWhy(r);
-  renderWorld(r);
-  renderCompare();
-}
-
-/* ── the world that day: other windows onto the chosen past's event day (/scene) ── */
+/* ── the scenes of a day (/scene) ── */
 const scenes = new Map(); // "day|place" → Promise<body>
 let worldToken = 0;
 function loadScene(day) {
@@ -451,162 +771,13 @@ function hashRate(th) {
   return `${(th * 1e12).toFixed(0)} H/s`;
 }
 const todayUTC = () => new Date().toISOString().slice(0, 10);
-const WORLD_NOTE = {
-  asof: "What the world could already see at 00:00 UTC on D. Each window shows the newest day it had then — never D itself.",
-  hind: "What happened on D, as we know it now. None of it could be seen at 00:00 UTC on D, and RE: never uses it to find look-alike days.",
-  past: "Other windows onto the day you chose. It was long past by D, so all of this was already out — shown as each source reports it today.",
-};
-let worldShown = null;
-
-/* which day each window is read from, for the view in use */
-async function worldSource(r) {
-  if (S.wv === "past") { const sc = await loadScene(r.day); return (k) => ({ w: sc.windows[k], day: r.day, time: sc.window_time || {} }); }
-  if (S.wv === "hind") { const sc = await loadScene(S.day); return (k) => ({ w: sc.windows[k], day: S.day, time: sc.window_time || {} }); }
-  // AS OF: each window from D − its as_of_lag (the newest day that was already published at D 00:00)
-  const byLag = new Map();
-  const [s1, s2] = await Promise.all([loadScene(ymdOf(dayNum(S.day) - 1)), loadScene(ymdOf(dayNum(S.day) - 2))]);
-  byLag.set(1, s1); byLag.set(2, s2);
-  const time = s1.window_time || {};
-  const extra = [...new Set(Object.values(time).map((t) => t.as_of_lag).filter((l) => Number.isInteger(l) && l > 0 && !byLag.has(l)))];
-  const more = await Promise.all(extra.map((l) => loadScene(ymdOf(dayNum(S.day) - l))));
-  extra.forEach((l, i) => byLag.set(l, more[i]));
-  return (k) => {
-    const lag = time[k] && Number.isInteger(time[k].as_of_lag) && time[k].as_of_lag > 0 ? time[k].as_of_lag : 1;
-    const sc = byLag.get(lag);
-    return { w: sc.windows[k], day: ymdOf(dayNum(S.day) - lag), time };
-  };
-}
-
-async function renderWorld(r) {
-  // with no look-alike day there is no past to show: look at D for now, and come back to the past when there is one
-  if (S.wv === "past" && !r) { S.wv = "asof"; S.wvAuto = true; }
-  else if (r && S.wvAuto) { S.wv = "past"; S.wvAuto = false; }
-  $("world").style.display = "";
-  for (const b of $("world-view").querySelectorAll("button")) {
-    b.setAttribute("aria-pressed", String(b.dataset.wv === S.wv));
-    if (b.dataset.wv === "past") { b.disabled = !r; b.textContent = r ? `Past ${S.sel + 1} · ${r.day}` : "Past"; }
-  }
-  const shownKey = (S.wv === "past" ? `past|${r.day}|${S.sel}` : `${S.wv}|${S.day}`) + `|${S.place}`;
-  if (shownKey === worldShown) return; // already on screen
-  worldShown = shownKey;
-  const token = ++worldToken;
-  const head = $("world-day");
-  head.textContent = "";
-  const isD = S.wv !== "past";
-  head.append(el("span", { class: "k", style: `background:var(${isD ? "--series-d" : "--series-sel"})` }),
-    textWithDates("span", {}, S.wv === "asof" ? `D · ${S.day}, as seen at 00:00 UTC` : S.wv === "hind" ? `D · ${S.day}, as known now` : `Past ${S.sel + 1} · ${r.day}`));
-  $("world-note").textContent = WORLD_NOTE[S.wv] + (S.wv === "hind" && S.day >= todayUTC() ? " D is today, so the day is not over yet." : "");
-  const box = $("world-body");
-  box.textContent = "";
-  box.append(el("p", { class: "note" }, "Looking through other windows…"));
-  box.classList.add("loading");
-  let get;
-  try { get = await worldSource(r); } catch (e) {
-    if (token !== worldToken) return;
-    worldShown = null; // not shown: the next look tries again
-    box.classList.remove("loading");
-    box.textContent = "";
-    box.append(el("p", { class: "note" }, `The other windows could not be reached this time (${e.message}). Switching the view again will retry.`));
-    return;
-  }
-  if (token !== worldToken) return; // the choice changed while this was loading
-  box.classList.remove("loading");
-  box.textContent = "";
-
-  // the label on the right of each window: in AS OF, first the day it shows
-  // the label on the right: in AS OF, first the day it shows; then the value status (Nova's second axis)
-  const VALUE_MARK = { current: "value today", revised: "revised later" };
-  const when = (k, day, extra, x) => {
-    const vs = x && x.state === "on" && get(k).time[k] ? VALUE_MARK[get(k).time[k].value_status] : null;
-    return [S.wv === "asof" ? day : null, extra, vs].filter(Boolean).join(" · ") || null;
-  };
-  const on = (x) => x && x.state === "on";
-
-  const wiki = (key, title, n) => {
-    const { w: x, day } = get(key), b = winBox(title, when(key, day, on(x) ? "most read" : null, x));
-    if (!on(x)) b.append(absentLine(x || {}));
-    else if (!x.items.length) b.append(absentLine({ reason: "no pages listed" }));
-    else b.append(listOf(x.items.slice(0, n), (i) => i.title, (i) => int(i.views)));
-    return b;
-  };
-  box.append(wiki("wikipedia_en", "Wikipedia · English", 5));
-
-  { const { w: hn, day } = get("hacker_news"), b = winBox("Hacker News", when("hacker_news", day, null, hn));
-    if (!on(hn)) b.append(absentLine(hn || {}));
-    else if (!hn.items.length) b.append(absentLine({ reason: "no stories that day" }));
-    else b.append(listOf(hn.items.slice(0, 3), (i) => i.title, (i) => `${int(i.points)} pts`));
-    box.append(b); }
-
-  { const { w: ap, day } = get("apod"), b = winBox("NASA · Picture of the Day", when("apod", day, null, ap));
-    if (!on(ap)) b.append(absentLine(ap || {}));
-    else {
-      const p = el("p", { class: "one" });
-      p.append(link(ap.page_url, ap.title || "(untitled)"));
-      b.append(p);
-      if (ap.credit) b.append(el("p", { class: "sub" }, ap.credit));
-    }
-    box.append(b); }
-
-  { const { w: q, day } = get("earthquakes"), b = winBox("Earthquakes · M4.5+", when("earthquakes", day, null, q));
-    if (!on(q)) b.append(absentLine(q || {}));
-    else {
-      b.append(el("p", { class: "one" }, q.count_m45 === null ? "count unavailable" : `${int(q.count_m45)} on this UTC day`));
-      const big = (q.biggest || [])[0];
-      if (big) b.append(el("p", { class: "sub" }, `Largest: M${Number(big.mag).toFixed(1)} · ${big.place || "unnamed place"}`));
-    }
-    box.append(b); }
-
-  { const { w: fx, day } = get("fx"), b = winBox("Exchange rates · ECB", when("fx", day, null, fx));
-    if (!on(fx)) b.append(absentLine(fx || {}));
-    else {
-      const f = (v, d) => (v === null || v === undefined ? "—" : Number(v).toFixed(d));
-      b.append(el("p", { class: "one" }, `1 USD = ${f(fx.usd_jpy, 2)} JPY · ${f(fx.usd_eur, 4)} EUR`));
-      if (fx.note) b.append(textWithDates("p", { class: "sub" }, fx.note));
-    }
-    box.append(b); }
-
-  { const { w: bn, day } = get("bitcoin_network"), b = winBox("Bitcoin network", when("bitcoin_network", day, null, bn));
-    if (!on(bn)) b.append(absentLine(bn || {}));
-    else {
-      const vs = (c, what) => (c === null || c === undefined ? "" : ` · ${pct(c)} vs ${what}`);
-      b.append(el("p", { class: "one" }, bn.transactions === null ? `Transactions: ${bn.transactions_why || "—"}` : `${int(Math.round(bn.transactions))} transactions${vs(bn.transactions_change_7d, "a week before")}`));
-      b.append(el("p", { class: "sub" }, bn.hash_rate_avg7_th_s === null ? `Hash rate: ${bn.hash_rate_why || "—"}` : `Hash rate ${hashRate(bn.hash_rate_avg7_th_s)} (7-day average)${vs(bn.hash_rate_avg7_change, "the week before")}`));
-    }
-    box.append(b); }
-
-  { const { w: wx, day } = get("weather"), b = winBox("Weather", when("weather", day, null, wx));
-    const sel = el("select", { class: "place", "aria-label": "Place for the weather window" });
-    for (const pl of PLACES) { const o = el("option", { value: pl.id }, pl.name); if (pl.id === S.place) o.selected = true; sel.append(o); }
-    sel.addEventListener("change", () => { S.place = sel.value; writeHash(); worldShown = null; renderWorld(res.results[S.sel] || null); renderCompare(); });
-    b.append(sel);
-    if (!on(wx)) b.append(absentLine(wx || {}));
-    else {
-      const t = (v) => (v === null || v === undefined ? "—" : `${Number(v).toFixed(1)}`);
-      const sky = wx.weather ? wx.weather[0].toUpperCase() + wx.weather.slice(1) : "—";
-      b.append(el("p", { class: "one" }, `${sky} · ${t(wx.temp_min_c)} to ${t(wx.temp_max_c)} °C`));
-      b.append(el("p", { class: "sub" }, `Rain ${t(wx.precipitation_mm)} mm · wind up to ${t(wx.wind_max_kmh)} km/h · UTC day`));
-    }
-    box.append(b); }
-
-  box.append(wiki("wikipedia_ja", "Wikipedia · 日本語", 3));
-
-  { const { w: x, day } = get("x"), b = winBox("X", when("x", day, "a door, not data"));
-    if (x && x.url) {
-      const a = link(x.url, S.wv === "asof" ? "Search X for “bitcoin” up to D 00:00 ↗" : "Search X for “bitcoin” that day ↗");
-      a.className = "door";
-      b.append(a);
-    }
-    box.append(b); }
-
-  box.append(timeDetails(get("x").time));
-}
 
 /* each window's four times (Nova's window metadata), as a table-like list */
 const WINDOW_NAMES = { wikipedia_en: "Wikipedia · English", wikipedia_ja: "Wikipedia · 日本語", hacker_news: "Hacker News", apod: "NASA · Picture of the Day", earthquakes: "Earthquakes", fx: "Exchange rates · ECB", bitcoin_network: "Bitcoin network", weather: "Weather", x: "X" };
 const VALUE_STATUS = { as_published: "as published", current: "today's value", revised: "revised later — today's value" };
-function timeDetails(time) {
-  const d = el("details", { class: "times" });
-  d.append(el("summary", {}, "When each window knew what"));
+function timeDetails(time, flat = false) {
+  const d = el(flat ? "div" : "details", { class: "times" });
+  if (!flat) d.append(el("summary", {}, "When each window knew what"));
   d.append(el("p", {}, "A date on a window is not the moment the world could see it. Each window shows the times it has — when it happened, when it could be seen, when the data came out, whether it changes later. AS OF uses only what had come out by D 00:00 UTC."));
   for (const k of Object.keys(WINDOW_NAMES)) {
     const t = time[k];
@@ -623,6 +794,7 @@ function timeDetails(time) {
   }
   return d;
 }
+
 
 /* ── similar, through which window? (Market ranked the pasts; each other window says how alike they look from there) ── */
 const CMP_WINDOWS = [
@@ -743,12 +915,11 @@ function drawCompare(ready, why, loading) {
     b.append(wk, cmpCell(r.similarity.toFixed(2), null, r.similarity));
     for (const x of CMP_WINDOWS) {
       const W = ready[x.k];
-      if (!W) { b.append(cmpCell(loading.includes(x.k) ? "…" : "–", null)); setBar(i, x.k, loading.includes(x.k) ? undefined : null); continue; }
+      if (!W) { b.append(cmpCell(loading.includes(x.k) ? "…" : "–", null)); continue; }
       const s = windowSimilarity(W.comps, q, r.index, w);
       b.append(s ? cmpCell(s.similarity.toFixed(2), null, s.similarity) : cmpCell("–", null));
-      setBar(i, x.k, s ? s.similarity : null);
     }
-    b.addEventListener("click", () => { S.sel = i; renderResults(); renderReplay(); writeHash(); });
+    b.addEventListener("click", () => { if (view) view.animate = true; go({ view: "past", sel: i, open: null }); });
     grid.append(b);
   });
 
@@ -758,7 +929,7 @@ function drawCompare(ready, why, loading) {
   const lag = (ready.attention || ready.network || ready.weather || {}).lag ?? 2;
   notes.append(el("div", {}, `The market found these days (${res.mode === "STATE" ? "where it stood" : "how it moved"}, ${w}-day window). The other windows did not: each one only says how alike the same ${w} days look from there — where each stood within its own past year (STATE). 1 = the same, 0 = nothing alike.`));
   notes.append(el("div", {}, `Each window uses only what had come out by 00:00 UTC of that day, so Attention, Weather and Network are read ${lag} days back.`));
-  notes.append(el("div", {}, `Attention = daily views of English Wikipedia's “Bitcoin” article · Weather = ${placeNow().name} (change the place in The world that day) · Network = transactions and hash rate (7-day average).`));
+  notes.append(el("div", {}, `Attention = daily views of English Wikipedia's “Bitcoin” article · Weather = ${placeNow().name} (change the place in a day's Weather window) · Network = transactions and hash rate (7-day average).`));
   for (const x of CMP_WINDOWS) {
     if (why[x.k]) { notes.append(el("div", {}, `– ${x.name}: ${why[x.k]}`)); continue; }
     const W = ready[x.k];
@@ -769,6 +940,7 @@ function drawCompare(ready, why, loading) {
     }
   }
 }
+
 
 function niceTicks(lo, hi, count = 4) {
   const span = hi - lo || 0.02;
@@ -811,11 +983,11 @@ function drawChart() {
   // x ticks
   for (const o of [-7, 0, 7, 14, 30]) {
     g.append(svg("text", { x: X(o), y: H - 8, "text-anchor": "middle", "font-size": 11, fill: o === 0 ? "var(--ink-2)" : "var(--muted)", "font-weight": o === 0 ? 700 : 400 },
-      o === 0 ? "EVENT" : (o > 0 ? `+${o}d` : `${MINUS}${-o}d`)));
+      o === 0 ? "that day" : (o > 0 ? `+${o}d` : `${MINUS}${-o}d`)));
   }
   // the event line and D's unknown future
   g.append(svg("line", { x1: X(0), x2: X(0), y1: m.t - 6, y2: H - m.b, stroke: "var(--axis)", "stroke-width": 1, "shape-rendering": "crispEdges" }));
-  g.append(svg("text", { x: X(0) + 6, y: m.t - 8, "font-size": 11, fill: "var(--muted)" }, "after D: not yet known on D"));
+  g.append(svg("text", { x: X(0) + 6, y: m.t - 8, "font-size": 11, fill: "var(--muted)" }, "after your day: hidden"));
 
   const lineOf = (vals) => {
     let d = "", pen = false;
@@ -829,7 +1001,12 @@ function drawChart() {
   const color = { context: "var(--context)", d: "var(--series-d)", sel: "var(--series-sel)" };
   for (const kind of ["context", "d", "sel"]) {
     for (const s of series.filter((x) => x.kind === kind)) {
-      g.append(svg("path", { d: lineOf(s.rep.path), fill: "none", stroke: color[kind], "stroke-width": kind === "context" ? 1.5 : 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+      const path = svg("path", { d: lineOf(s.rep.path), fill: "none", stroke: color[kind], "stroke-width": kind === "context" ? 1.5 : 2, "stroke-linejoin": "round", "stroke-linecap": "round" });
+      g.append(path);
+      // entering a day: its line draws itself from the left
+      if (kind === "sel" && view.animate) {
+        try { const len = Math.ceil(path.getTotalLength()); if (len > 0) { path.style.setProperty("--len", String(len)); path.classList.add("draw"); } } catch { /* no layout yet */ }
+      }
     }
   }
   // end dots + selective direct labels (D at the event, the chosen past at +30d)
@@ -883,7 +1060,7 @@ function showAt(o) {
   const color = { context: "var(--context)", d: "var(--series-d)", sel: "var(--series-sel)" };
   const tip = $("tip");
   tip.textContent = "";
-  tip.append(el("div", { class: "t" }, o === 0 ? "Event day" : `${o > 0 ? "+" : MINUS}${Math.abs(o)} days from the event`));
+  tip.append(el("div", { class: "t" }, o === 0 ? "That day" : `${o > 0 ? "+" : MINUS}${Math.abs(o)} days from the event`));
   for (const s of order) {
     const v = s.rep.path[o - view.lo];
     if (v !== null) L.append(svg("circle", { cx: x, cy: view.Y(v), r: s.kind === "context" ? 3 : 4, fill: color[s.kind], stroke: "var(--surface)", "stroke-width": 2 }));
@@ -923,7 +1100,7 @@ function renderTable(D, selRep, r) {
   const tbody = el("tbody");
   REPLAY_OFFSETS.forEach((o, i) => {
     const row = el("tr", { class: o === 0 ? "event" : undefined });
-    row.append(el("th", { scope: "row", style: "text-align:left;font-weight:inherit" }, o === 0 ? "EVENT" : `${o > 0 ? "+" : MINUS}${Math.abs(o)}d`));
+    row.append(el("th", { scope: "row", style: "text-align:left;font-weight:inherit" }, o === 0 ? "that day" : `${o > 0 ? "+" : MINUS}${Math.abs(o)}d`));
     const cell = (p) => {
       if (p.state === "unknown") return el("td", { class: "unknown", title: "Not yet known on D" }, "?");
       if (p.state !== "seen") return el("td", { class: "unknown" }, "—");
@@ -953,13 +1130,17 @@ function renderWhy(r) {
   if (offNow.length) box.append(el("span", { class: "note", style: "grid-column:1 / 4" }, `Not compared: ${offNow.map((k) => LABEL[k]).join(", ")}.`));
 }
 
+
 function renderFooter() {
-  const f = $("footer");
-  f.textContent = "";
-  const lastOn = meta.last_on || {};
-  f.append(el("div", {}, `Archive: ${ex.first} → ${ex.last}. Fear & Greed through ${lastOn.sentiment || "—"}.`));
-  f.append(el("div", {}, "Data: CoinMarketCap API (quotes, OHLCV and Fear & Greed history), kept in RE:'s own archive. RE: observes; it does not predict."));
-  f.append(el("div", {}, "Other windows: Wikimedia pageviews, Hacker News (Algolia), NASA APOD, USGS earthquakes, ECB rates via Frankfurter; X is a link only."));
+  for (const id of ["footer", "footer-how"]) {
+    const f = $(id);
+    f.textContent = "";
+    const lastOn = meta.last_on || {};
+    f.append(el("div", {}, `Archive: ${ex.first} → ${ex.last}. Fear & Greed through ${lastOn.sentiment || "—"}.`));
+    f.append(el("div", {}, "Data: CoinMarketCap API (quotes, OHLCV and Fear & Greed history), kept in RE:'s own archive. RE: observes; it does not predict."));
+    f.append(el("div", {}, "Other windows: Wikimedia pageviews, Hacker News (Algolia), NASA APOD, USGS earthquakes, Open-Meteo weather, Blockchain.com, ECB rates via Frankfurter; X is a link only."));
+  }
 }
+
 
 boot();

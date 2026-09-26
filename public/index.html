@@ -256,11 +256,11 @@
   .win a.door { display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; border-radius: 10px; background: var(--plane); box-shadow: inset 0 0 0 1px var(--ring); text-decoration: none; font-size: 13px; font-weight: 600; }
   select.place { height: 40px; margin: 2px 0 6px; padding: 0 10px; font: inherit; font-size: 16px; color: var(--ink); background: var(--plane); border: 0; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--ring); }
   details.times { margin-top: 2px; }
-  details.times .t { padding: 8px 0; border-top: 1px solid var(--grid); }
-  details.times h4 { margin: 0 0 4px; font-size: 13px; font-weight: 650; }
-  details.times dl { display: grid; grid-template-columns: 96px 1fr; gap: 3px 10px; margin: 0; font-size: 12px; }
-  details.times dt { color: var(--muted); }
-  details.times dd { margin: 0; color: var(--ink-2); overflow-wrap: anywhere; }
+  .times .t { padding: 8px 0; border-top: 1px solid var(--grid); }
+  .times h4 { margin: 0 0 4px; font-size: 13px; font-weight: 650; }
+  .times dl { display: grid; grid-template-columns: 96px 1fr; gap: 3px 10px; margin: 0; font-size: 12px; }
+  .times dt { color: var(--muted); }
+  .times dd { margin: 0; color: var(--ink-2); overflow-wrap: anywhere; }
   .cmp { display: flex; flex-direction: column; gap: 5px; }
   .cmp-row { display: grid; grid-template-columns: 74px repeat(4, minmax(0, 1fr)); gap: 6px; align-items: center; width: 100%; padding: 8px 8px; border: 0; border-radius: 10px; background: transparent; text-align: left; font: inherit; color: inherit; }
   .cmp-row.head { padding-top: 0; padding-bottom: 0; font-size: 11px; color: var(--muted); }
@@ -316,6 +316,93 @@
   @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
   .results > *, #world-body > * { animation: rise 0.22s ease-out both; }
   @media (prefers-reduced-motion: reduce) { .results > *, #world-body > * { animation: none; } .result, .try button, .views button { transition: none; } }
+  /* ── one day at a time (2026-09-27, with Nova): a stage, doors, and the windows of a day ── */
+  .screen { animation: slide 0.24s ease-out both; }
+  .screen[hidden] { display: none; }
+  @keyframes slide { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+  .topline { display: flex; align-items: baseline; gap: 10px; padding: 14px 2px 0; min-height: 36px; }
+  .topline .mark { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+  .trail { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 0; }
+  .trail button { border: 0; background: none; padding: 4px 2px; color: var(--ink-2); font: inherit; font-weight: 600; cursor: pointer; }
+  .trail button[aria-current="true"] { color: var(--ink); }
+  .trail .arrow { color: var(--axis); }
+  .stage { text-align: center; padding: 18px 0 8px; }
+  .ov { position: relative; display: inline-block; cursor: pointer; }
+  .ov select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; font-size: 16px; cursor: pointer; -webkit-appearance: none; appearance: none; }
+  .big-y { display: block; font-size: 22px; font-weight: 600; color: var(--ink-2); letter-spacing: 0.06em; font-variant-numeric: tabular-nums; padding: 2px 10px; border-radius: 10px; }
+  .md { display: flex; justify-content: center; gap: 12px; margin-top: 2px; }
+  .big-md { display: block; font-size: 56px; line-height: 1.05; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; padding: 0 6px; border-radius: 14px; }
+  .ov:active .big-y, .ov:active .big-md { background: var(--wash); }
+  .ov:focus-within .big-y, .ov:focus-within .big-md { box-shadow: 0 0 0 2px var(--series-d); }
+  .price { margin: 10px 0 0; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .price small { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; color: var(--muted); }
+  .price .hist { display: block; margin-top: 4px; font-weight: 500; }
+  .step { display: flex; justify-content: center; gap: 10px; margin-top: 14px; }
+  .step button { min-width: 48px; height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--wash); color: var(--ink); font-size: 15px; font-weight: 650; cursor: pointer; }
+  .step button:disabled { opacity: 0.35; cursor: default; }
+  .step button:active { transform: scale(0.96); }
+  .hidden-line { margin: 14px 0 0; font-size: 13px; color: var(--muted); }
+  .stage .try { justify-content: center; margin-top: 12px; }
+  .list { margin-top: 22px; }
+  .list-head { display: flex; flex-direction: column; gap: 2px; margin: 0 2px 10px; }
+  .list-head h2 { margin: 0; }
+  .quiet-inline { font-size: 12.5px; color: var(--muted); }
+  .rows { display: flex; flex-direction: column; background: var(--surface); border-radius: 16px; box-shadow: 0 0 0 1px var(--ring); overflow: hidden; }
+  .rows > .row { display: grid; grid-template-columns: 1fr auto 14px; align-items: center; gap: 2px 10px; width: 100%; padding: 14px 16px; border: 0; border-top: 1px solid var(--grid); background: transparent; text-align: left; font: inherit; color: inherit; cursor: pointer; animation: rise 0.22s ease-out both; }
+  .rows > .row:first-child { border-top: 0; }
+  .rows > .row:active { background: var(--wash); }
+  .row .when { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .row .when small { font-size: 13px; font-weight: 600; color: var(--muted); margin-right: 6px; }
+  .row .sim { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  .row .chev { color: var(--axis); font-size: 20px; line-height: 1; }
+  .row .hist { grid-column: 1 / 3; }
+  .rows .empty { padding: 16px; font-size: 13px; color: var(--muted); }
+  .hist { font-size: 12px; color: var(--muted); }
+  .row-link { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: 12px; padding: 15px 16px; border: 0; border-radius: 16px; background: var(--surface); box-shadow: 0 0 0 1px var(--ring); font: inherit; font-size: 15px; font-weight: 650; color: var(--ink); cursor: pointer; }
+  .row-link span { color: var(--axis); font-size: 20px; line-height: 1; }
+  .row-link:active { background: var(--wash); }
+  .quiet-link { background: transparent; box-shadow: none; color: var(--ink-2); font-weight: 600; padding: 12px 4px; }
+  #footer, #footer-how { margin-top: 14px; }
+  .bar { display: flex; align-items: center; gap: 10px; padding: 10px 0 0; min-height: 44px; }
+  .back { flex: none; border: 0; background: none; padding: 8px 4px 8px 0; font: inherit; font-size: 16px; font-weight: 600; color: var(--series-d); cursor: pointer; }
+  .day-head { padding: 10px 2px 4px; }
+  .day-head h1 { margin: 0; font-size: 34px; line-height: 1.1; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .day-head .sub { margin: 6px 0 0; font-size: 14px; color: var(--ink-2); }
+  .day-head .hist { margin: 4px 0 0; }
+  .pnav { display: flex; justify-content: space-between; margin-top: 10px; }
+  .pnav button { border: 0; background: none; padding: 6px 0; font: inherit; font-size: 14px; font-weight: 600; color: var(--ink-2); cursor: pointer; }
+  .pnav button:disabled { opacity: 0.3; cursor: default; }
+  .block { margin-top: 20px; }
+  .block h2 { margin: 0 2px 10px; }
+  .checks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+  .check { background: var(--surface); border-radius: 14px; box-shadow: 0 0 0 1px var(--ring); padding: 12px 10px; text-align: center; animation: rise 0.3s ease-out both; }
+  .check:nth-child(2) { animation-delay: 0.08s; } .check:nth-child(3) { animation-delay: 0.16s; }
+  .check b { display: block; font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .check small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--muted); }
+  .chart-wrap { background: var(--surface); border-radius: 16px; box-shadow: 0 0 0 1px var(--ring); padding: 6px 4px; margin: 6px 0 0; }
+  .legend { margin: 8px 2px 4px; }
+  .draw { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); animation: draw 0.9s ease-out 0.1s forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .tile { display: flex; flex-direction: column; justify-content: space-between; gap: 6px; min-height: 84px; padding: 10px; border: 0; border-radius: 14px; background: var(--surface); box-shadow: 0 0 0 1px var(--ring); text-align: left; font: inherit; color: inherit; cursor: pointer; animation: rise 0.22s ease-out both; }
+  .tile:active { transform: scale(0.97); }
+  .tile[aria-expanded="true"] { box-shadow: inset 0 0 0 2px var(--ink); }
+  .tile .tn { font-size: 12px; font-weight: 700; color: var(--ink-2); }
+  .tile .tt { font-size: 13px; font-weight: 600; line-height: 1.25; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .tile .tt.dim { color: var(--muted); font-weight: 500; }
+  .opened { margin-top: 10px; }
+  .opened > .win { background: var(--surface); border-radius: 16px; box-shadow: 0 0 0 1px var(--ring); padding: 14px; animation: rise 0.22s ease-out both; }
+  .opened .alike { display: flex; align-items: center; gap: 10px; margin: 2px 0 8px; font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .opened .alike { flex-wrap: wrap; }
+  .opened .alike .meter { flex: 0 0 72px; max-width: 72px; }
+  .opened h4 { margin: 12px 0 4px; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .primary { display: block; width: 100%; margin-top: 22px; height: 52px; border: 0; border-radius: 14px; background: var(--on-bg); color: var(--on-ink); font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
+  .primary:active { transform: scale(0.98); }
+  .center { text-align: center; }
+  #d-view { margin-top: 12px; }
+  .how-title { margin: 8px 2px 14px; font-size: 28px; font-weight: 800; }
+  .card h3 { margin: 0 0 10px; font-size: 16px; font-weight: 700; }
+  .card.explain p { font-size: 13px; color: var(--ink-2); margin: 6px 0; }
   footer { font-size: 12px; color: var(--muted); padding: 6px 2px; }
   footer a { color: var(--ink-2); }
   .loading { opacity: 0.55; transition: opacity 0.15s; }
@@ -324,91 +411,141 @@
 </head>
 <body>
 <div class="page">
-  <header class="hero">
-    <h1>RE:</h1>
-    <p class="lede">Pick a day in Bitcoin's history. See the days that looked like it — and what came after them.</p>
-    <div class="pick" role="group" aria-label="Pick a day">
-      <label class="sel year"><span class="sr">Year</span><select id="d-y"></select></label>
-      <label class="sel month"><span class="sr">Month</span><select id="d-m"></select></label>
-      <label class="sel dd"><span class="sr">Day</span><select id="d-d"></select></label>
+
+  <!-- 1. the day you stand on -->
+  <main id="v-home" class="screen" aria-label="The day you stand on">
+    <div class="topline"><span class="mark">RE:</span><nav id="trail-home" class="trail" aria-label="Where you have stood"></nav></div>
+    <section class="stage" aria-label="Pick a day">
+      <label class="ov yr"><span id="h-yr" class="big-y"></span><select id="d-y" aria-label="Year"></select></label>
+      <div class="md">
+        <label class="ov"><span id="h-mo" class="big-md"></span><select id="d-m" aria-label="Month"></select></label>
+        <label class="ov"><span id="h-dd" class="big-md"></span><select id="d-d" aria-label="Day"></select></label>
+      </div>
+      <p id="h-price" class="price"></p>
+      <div class="step" role="group" aria-label="Move one day">
+        <button id="prev-day" type="button" aria-label="The day before">‹</button>
+        <button id="latest" type="button">Today</button>
+        <button id="next-day" type="button" aria-label="The day after">›</button>
+      </div>
+      <p class="hidden-line">From this day, what comes next is hidden.</p>
+      <div id="try" class="try" role="group" aria-label="Days to try"></div>
+    </section>
+
+    <section class="list" aria-label="Days that looked like it">
+      <div class="list-head"><h2>Days that looked like it</h2><span id="found" class="quiet-inline"></span></div>
+      <div id="status" aria-live="polite"></div>
+      <div id="results" class="rows"></div>
+    </section>
+
+    <button id="look" class="row-link" type="button">Look around this day <span aria-hidden="true">›</span></button>
+    <button id="how-link" class="row-link quiet-link" type="button">How RE: works <span aria-hidden="true">›</span></button>
+    <footer id="footer"></footer>
+  </main>
+
+  <!-- 2. inside a day that looked like it -->
+  <main id="v-past" class="screen" hidden aria-label="A day that looked like it">
+    <div class="bar"><button class="back" type="button">‹ Back</button><nav id="trail-past" class="trail" aria-label="Where you have stood"></nav></div>
+    <header class="day-head">
+      <h1 id="p-title"></h1>
+      <p id="p-sub" class="sub"></p>
+      <p id="p-hist" class="hist"></p>
+      <div class="pnav"><button id="p-prev" type="button">‹ Previous</button><button id="p-next" type="button">Next ›</button></div>
+    </header>
+
+    <section class="block" aria-label="What came after">
+      <h2>What came after</h2>
+      <div id="checks" class="checks"></div>
+      <div id="legend" class="legend"></div>
+      <div class="chart-wrap">
+        <svg id="chart" viewBox="0 0 360 230" role="img" tabindex="0" aria-label="Price change around the day"></svg>
+        <div id="tip" class="tip" aria-hidden="true"></div>
+      </div>
+      <p id="p-hidden" class="quiet"></p>
+    </section>
+
+    <section class="block" aria-label="The world that day">
+      <h2>The world that day</h2>
+      <div id="p-tiles" class="tiles"></div>
+      <div id="p-open" class="opened" aria-live="polite"></div>
+    </section>
+
+    <button id="stand" class="primary" type="button"></button>
+    <p id="stand-note" class="quiet center"></p>
+  </main>
+
+  <!-- 3. the day you stand on, seen through the windows -->
+  <main id="v-day" class="screen" hidden aria-label="Look around this day">
+    <div class="bar"><button class="back" type="button">‹ Back</button><nav id="trail-day" class="trail" aria-label="Where you have stood"></nav></div>
+    <header class="day-head">
+      <h1 id="d-title"></h1>
+      <p class="sub">The day you stand on</p>
+    </header>
+    <div id="d-view" class="seg" role="group" aria-label="Seen when">
+      <button type="button" data-dv="asof">As seen at 00:00</button>
+      <button type="button" data-dv="hind">As known now</button>
     </div>
-    <div id="try" class="try" role="group" aria-label="Days to jump to"></div>
-  </header>
+    <p id="d-note" class="quiet"></p>
+    <section class="block" aria-label="The world that day">
+      <div id="d-tiles" class="tiles"></div>
+      <div id="d-open" class="opened" aria-live="polite"></div>
+    </section>
+  </main>
 
-  <p id="status" class="status" aria-live="polite">Opening the archive…</p>
+  <!-- 4. how it works, and the knobs -->
+  <main id="v-how" class="screen" hidden aria-label="How RE: works">
+    <div class="bar"><button class="back" type="button">‹ Back</button></div>
+    <h1 class="how-title">How RE: works</h1>
 
-  <section class="card" aria-label="Days that looked like it">
-    <h2>Days that looked like it</h2>
-    <div id="results" class="results"></div>
-    <p class="quiet">The market found these days. The bars show how alike each one looks through four windows onto the world.</p>
-  </section>
+    <section class="card">
+      <h3>Look differently</h3>
+      <p class="label">Window</p>
+      <div id="width" class="seg" role="group" aria-label="Window in days"></div>
+      <p class="label">Compare by</p>
+      <div id="mode" class="seg" role="group" aria-label="Compare by">
+        <button type="button" data-mode="STATE">Where it stood</button>
+        <button type="button" data-mode="TRAJECTORY">How it moved</button>
+      </div>
+      <p id="mode-hint" class="hint"></p>
+      <p class="label">What the market is made of</p>
+      <div id="chips" class="chips"></div>
+      <p class="chip-key">● on · ○ off (tap) · – absent (no data for this window)</p>
+      <div id="absent-why" class="chip-key" style="margin-top:4px"></div>
+    </section>
 
-  <section id="replay" class="card" aria-label="What happened next">
-    <h2>What happened next</h2>
-    <p id="readout" class="readout"></p>
-    <div id="picker" class="seg mini" role="group" aria-label="Choose a day that looked like it"></div>
-    <div id="legend" class="legend"></div>
-    <div class="chart-wrap">
-      <svg id="chart" viewBox="0 0 360 230" role="img" tabindex="0" aria-label="Price change around the event day"></svg>
-      <div id="tip" class="tip" aria-hidden="true"></div>
-    </div>
-  </section>
+    <section class="card">
+      <h3>The numbers behind it</h3>
+      <div id="status-detail" class="detail"></div>
+      <table id="table" aria-label="Checkpoints"></table>
+      <div id="why-wrap">
+        <p class="label" style="margin-top:14px">Why it matched (market)</p>
+        <div id="why" class="why"></div>
+      </div>
+    </section>
 
-  <section id="world" class="card" aria-label="The world that day" style="display:none">
-    <h2>The world that day</h2>
-    <p id="world-day" class="world-day"></p>
-    <p id="world-note" class="quiet" style="margin:0 0 12px"></p>
-    <div id="world-body" class="world" aria-live="polite"></div>
-    <div id="world-view" class="views" role="group" aria-label="Which day to look at">
-      <button type="button" data-wv="past">Past</button>
-      <button type="button" data-wv="asof">D, as seen then</button>
-      <button type="button" data-wv="hind">D, as known now</button>
-    </div>
-  </section>
+    <section class="card">
+      <h3>Through each window</h3>
+      <div id="compare-grid" class="cmp" role="table" aria-label="How alike each day looks to D, window by window"></div>
+      <div id="compare-notes" class="cmp-notes"></div>
+    </section>
 
-  <details id="more" class="card drawer">
-    <summary>Adjust &amp; how it works</summary>
+    <section class="card">
+      <h3>When each window knew what</h3>
+      <div id="times"></div>
+    </section>
 
-    <h3>Look differently</h3>
-    <p class="label">Window</p>
-    <div id="width" class="seg" role="group" aria-label="Window in days"></div>
-    <p class="label">Compare by</p>
-    <div id="mode" class="seg" role="group" aria-label="Compare by">
-      <button type="button" data-mode="STATE">Where it stood</button>
-      <button type="button" data-mode="TRAJECTORY">How it moved</button>
-    </div>
-    <p id="mode-hint" class="hint"></p>
-    <p class="label">What the market is made of</p>
-    <div id="chips" class="chips"></div>
-    <p class="chip-key">● on · ○ off (tap) · – absent (no data for this window)</p>
-    <div id="absent-why" class="chip-key" style="margin-top:4px"></div>
-
-    <h3>The numbers behind it</h3>
-    <div id="status-detail" class="detail"></div>
-    <table id="table" aria-label="Replay checkpoints"></table>
-    <div id="why-wrap">
-      <p class="label" style="margin-top:14px">Why it matched (market)</p>
-      <div id="why" class="why"></div>
-    </div>
-
-    <h3>Through each window</h3>
-    <div id="compare-grid" class="cmp" role="table" aria-label="How alike each day looks to D, window by window"></div>
-    <div id="compare-notes" class="cmp-notes"></div>
-
-    <h3>How RE: measures “similar”</h3>
-    <div class="explain">
-      <p><strong>Where it stood</strong> (STATE) puts each axis on a 0–1 scale: where it stood within its own past year, using only data up to that day. Price, market cap, volatility and the change figures use the past-year range; volume is compared on a log scale; Fear &amp; Greed is its 0–100 value. With less than 30 days of past an axis is absent; with less than a year, the number of days used is shown.</p>
+    <section class="card explain">
+      <h3>How RE: measures “similar”</h3>
+      <p><strong>Where it stood</strong> (STATE) puts each axis on a 0–1 scale: where it stood within its own past year, using only data up to that day. Price, market cap, volatility and the change figures use the past-year range; volume is compared on a log scale; Fear &amp; Greed is its 0–100 value. With less than 30 days of past an axis is absent.</p>
       <p><strong>How it moved</strong> (TRAJECTORY) compares how things moved inside the window, from its first day: price as % change, volume against the window's median (log), volatility as is, Fear &amp; Greed as points gained or lost. Each axis has a fixed scale, so a match does not depend on which other windows were searched.</p>
       <p><strong>Strict time</strong>: a past day only counts if its next 30 days had already happened by D. D's own future stays hidden.</p>
       <p><strong>Spacing</strong>: the look-alike days are at least 30 days apart, so one long stretch of the market is not shown five times. If several still come from the same season, that stretch really did last.</p>
-      <p><strong>Short history</strong>: days in the archive's first year have less than a year behind them, so they are measured against a shorter past. They stay in the list, marked, because they are the earliest time RE: can see.</p>
+      <p><strong>Short and incomplete history</strong>: a day in the archive's first year has less than a year behind it (short history); a later day can have gaps in its past year (incomplete history). Both stay in the list, marked with how many days were there to compare.</p>
       <p>Only axes present on both sides are compared; their weights are shared out again. A past day is compared only if at least half of D's axes (by weight) can be compared there — the ones left out are counted, not hidden.</p>
-      <p><strong>Other windows</strong> (Wikipedia, weather, the Bitcoin network) never change which days are found. They only show how alike those days look from somewhere else, using what had come out by 00:00 UTC of each day.</p>
+      <p><strong>Other windows</strong> (Wikipedia, weather, the Bitcoin network and the rest) never change which days are found. They only show how that day looked from somewhere else, using what had come out by 00:00 UTC of each day.</p>
       <p>RE: shows what followed similar days. It is not a forecast and not investment advice.</p>
-    </div>
-  </details>
-
-  <footer id="footer">Data: CoinMarketCap API (quotes, OHLCV and Fear &amp; Greed history), kept in RE:'s own archive.</footer>
+    </section>
+    <footer id="footer-how"></footer>
+  </main>
 </div>
 <script type="module" src="./app.js"></script>
 </body>
