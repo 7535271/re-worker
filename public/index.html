@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="light dark">
 <title>RE: Temporal Playground</title>
 <meta name="description" content="Pick a day in Bitcoin's history. RE: finds the most similar pasts that were already visible from that day, and replays what came after them.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23F6B896'/%3E%3Ctext x='30' y='42' font-family='system-ui,sans-serif' font-size='27' font-weight='800' fill='%23ffffff' text-anchor='middle'%3ERE%3Ctspan fill='%23D3CEC7'%3E:%3C/tspan%3E%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23F6B896'/%3E%3Ctext x='30' y='42' font-family='system-ui,sans-serif' font-size='27' font-weight='800' fill='%23f9f9f7' text-anchor='middle'%3ERE%3Ctspan fill='%23D3CEC7'%3E:%3C/tspan%3E%3C/text%3E%3C/svg%3E">
 <style>
   :root {
     color-scheme: light;
@@ -26,7 +26,7 @@
     --meter-track: #ecebe6;
     --on-bg: #0b0b0b;
     --on-ink: #fcfcfb;
-    --brand-bg: #F6B896;      /* the RE: mark: pale orange, white letters, pale gray colon */
+    --brand-bg: #F6B896;      /* the RE: mark: pale orange tag, letters cut out in the page color, pale gray colon */
     --brand-ink: #ffffff;
     --brand-colon: #D3CEC7;
   }
@@ -330,7 +330,7 @@
   .topline { display: flex; align-items: baseline; gap: 10px; padding: 14px 2px 0; min-height: 36px; }
   .topline { align-items: center; }
   /* capital letters have no descenders, so an even padding makes the tag look low: trim the line box to the letters where the browser can, and lift them by hand where it cannot */
-  .topline .mark { display: inline-block; padding: 6.5px 9px 3.5px; border-radius: 9px; background: var(--brand-bg); color: var(--brand-ink); font-size: 19px; line-height: 1; font-weight: 800; letter-spacing: -0.02em; }
+  .topline .mark { display: inline-block; padding: 6.5px 9px 3.5px; border-radius: 9px; background: var(--brand-bg); color: var(--plane); font-size: 19px; line-height: 1; font-weight: 800; letter-spacing: -0.02em; }
   @supports (text-box: trim-both cap alphabetic) {
     .topline .mark { text-box: trim-both cap alphabetic; padding: 7px 9px; }
   }
