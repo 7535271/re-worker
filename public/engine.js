@@ -65,6 +65,7 @@ export const TRAJ_SCALE = {
   attention: 1,
 };
 
+export const PICK_GAP_DAYS = 30;                   // 似てる日どうしは30日以上離す
 export const HORIZON = 30;                         // STRICT：候補のリプレイはここまで D 以前に収める
 export const REPLAY_OFFSETS = [-7, -1, 0, 1, 3, 7, 14, 30];
 export const WIDTHS = [1, 7, 15, 30];
@@ -338,8 +339,9 @@ export function search(tl, st, opts) {
   }
   scored.sort((a, b) => a.d - b.d || b.c - a.c);
 
-  // 同じ出来事の中の隣り合う日ばかりにならないように、選んだ窓の近く（max(w,7) 日以内）は飛ばす
-  const gap = Math.max(w, 7);
+  // 同じ出来事を何回も覗かないように、選んだ日の近く（max(w,30) 日以内）は飛ばす
+  // （2026-09-27、ノヴァ：7日 → 30日。「季節ごとに1つ」まではしない。同じ局面が長く続いたなら、それも観測として残す）
+  const gap = Math.max(w, PICK_GAP_DAYS);
   const picked = [];
   for (const s of scored) {
     if (picked.some((p) => Math.abs(p.c - s.c) < gap)) continue;
