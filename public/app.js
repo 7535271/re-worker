@@ -36,8 +36,8 @@ const WORDS = [["eclipse", "eclipse"], ["iphone", "iPhone"], ["ai", "AI"], ["spa
 
 const VIEWS = ["home", "stand", "past", "how"];
 const S = {
-  coin: "1", t: "world", q: "", day: null, mode: "STATE", width: 7, off: new Set(),
-  other: null, pk: "m", place: "tokyo", view: "home", open: null, mv: 7,
+  coin: "1", t: "market", q: "", day: null, mode: "STATE", width: 7, off: new Set(),
+  other: null, pk: "m", place: "tokyo", view: "home", open: null, mv: 7, mtv: "dots",
 };
 const SPANS = [[3, "3 days"], [7, "1 week"], [30, "1 month"]];
 /* the weather window looks at one place, chosen by the viewer */
@@ -112,7 +112,7 @@ function svg(tag, attrs = {}, text) {
 function readHash() {
   const h = new URLSearchParams(location.hash.slice(1));
   S.coin = COINS.some((c) => c.id === h.get("c")) ? h.get("c") : "1";
-  S.t = h.get("t") === "market" ? "market" : "world";
+  S.t = h.get("t") === "world" ? "world" : "market";
   S.q = normWord(h.get("q") || "");
   const d = h.get("d");
   S.day = d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
@@ -126,6 +126,7 @@ function readHash() {
   S.pk = ["w", "v"].includes(h.get("pk")) ? h.get("pk") : "m";
   const mv = Number(h.get("mv"));
   S.mv = SPANS.some(([x]) => x === mv) ? mv : 7;
+  S.mtv = h.get("mtv") === "lines" ? "lines" : "dots";
   S.place = PLACES.some((x) => x.id === h.get("pl")) ? h.get("pl") : PLACES[0].id;
   S.view = VIEWS.includes(h.get("v")) ? h.get("v") : "home";
   S.open = h.get("o") || null;
@@ -133,7 +134,7 @@ function readHash() {
 function writeHash(push = false) {
   const parts = [];
   if (S.coin !== "1") parts.push(`c=${S.coin}`);
-  if (S.t !== "world") parts.push(`t=${S.t}`);
+  if (S.t !== "market") parts.push(`t=${S.t}`);
   if (S.q) parts.push(`q=${encodeURIComponent(S.q)}`);
   if (S.day) parts.push(`d=${S.day}`);
   if (S.mode !== "STATE") parts.push(`m=${S.mode}`);
@@ -141,6 +142,7 @@ function writeHash(push = false) {
   if (S.off.size) parts.push(`off=${[...S.off].join(",")}`);
   if (S.other && S.view === "past") parts.push(`p=${S.other}`, `pk=${S.pk}`);
   if (S.mv !== 7) parts.push(`mv=${S.mv}`);
+  if (S.mtv !== "dots") parts.push(`mtv=${S.mtv}`);
   if (S.place !== PLACES[0].id) parts.push(`pl=${S.place}`);
   if (S.view !== "home") parts.push(`v=${S.view}`);
   if (S.open) parts.push(`o=${S.open}`);
@@ -235,7 +237,7 @@ function setupControls() {
     b.addEventListener("click", () => { $("q").value = label; go({ q: w }, S.q !== w); });
     words.append(b);
   }
-  $("pick-day").addEventListener("click", () => go({ view: "stand", open: null }));
+  $("pick-day").addEventListener("click", () => go({ view: "stand", open: null, q: "" }));
   // the day you stand on: each part of the big date has an invisible wheel on top, holding only days the archive has
   for (const id of ["d-y", "d-m", "d-d"]) $(id).addEventListener("change", () => pickFromWheels(id));
   $("prev-day").addEventListener("click", () => stepDay(-1));
@@ -252,6 +254,7 @@ function setupControls() {
   });
   $("open-next").addEventListener("click", openNext);
   $("s-seal").addEventListener("click", openOwn);
+  for (const b of $("mt-view").querySelectorAll("button")) b.addEventListener("click", () => { if (S.mtv !== b.dataset.v) { S.mtv = b.dataset.v; writeHash(false); renderTogether(); } });
   $("s-moves-lock").addEventListener("click", () => $("s-seal").scrollIntoView({ behavior: "smooth", block: "center" }));
   const spanBox = $("s-span");
   for (const [w, name] of SPANS) {
@@ -417,7 +420,7 @@ async function renderWorld() {
     return;
   }
   if (token !== worldToken || S.view !== "home") return;
-  const list = body.moments.filter((m) => m.day >= ex.first && m.day <= ex.last);
+  const list = body.moments.filter((m) => m.day >= ex.first && m.day <= ex.last).sort((a, b) => b.score - a.score);
   const before = body.moments.length - list.length;
   found.textContent = list.length ? `${list.length} moment${list.length === 1 ? "" : "s"}` + (before ? ` · ${before} before ${sym()}'s history` : "") : "";
   rows.textContent = "";
@@ -462,6 +465,7 @@ function bigMoves() {
   return got;
 }
 function renderMarket() {
+  renderTogetherList();
   const box = $("m-rows");
   box.textContent = "";
   const { falls, rises } = bigMoves();
@@ -471,7 +475,7 @@ function renderMarket() {
     for (const m of list) {
       const b = el("button", { type: "button", class: "row", style: `animation-delay:${i++ * 0.03}s` });
       b.append(whenCell(m.day), el("span", { class: `go ${m.move < 0 ? "down" : "up"}` }, pct(m.move)), el("span", { class: "chev", "aria-hidden": "true" }, "›"));
-      b.addEventListener("click", () => standOn(m.day));
+      b.addEventListener("click", () => { S.q = ""; standOn(m.day); });
       box.append(b);
     }
   }
@@ -503,7 +507,7 @@ async function refreshMoments() {
   try {
     const b = await loadMoments(S.q);
     if (key !== `${S.q}|${S.coin}`) return;
-    momentsList = b.moments.filter((m) => m.day >= ex.first && m.day <= ex.last);
+    momentsList = b.moments.filter((m) => m.day >= ex.first && m.day <= ex.last).sort((a, b) => b.score - a.score);
   } catch { momentsList = []; }
   momentsFor = key;
 }
@@ -530,7 +534,7 @@ function renderStand() {
   // what happened next: sealed until opened
   const open = ownOpen.has(ownKey());
   $("s-seal").hidden = open;
-  $("s-seal-note").textContent = `the next ${HORIZON} days of ${sym()}, the day itself as recorded now, and the moves like it`;
+  $("s-seal-note").textContent = `the next ${HORIZON} days of ${sym()}, what else moved with it, and the day itself as recorded now`;
   $("s-next").hidden = !open;
   if (open) drawOwn(false);
   renderMoves();
@@ -572,7 +576,7 @@ function renderMoves() {
     b.addEventListener("click", () => go({ view: "past", pk: "v", other: r.day, open: null }));
     box.append(b);
   });
-  note.append(textWithDates("span", {}, `${S.day}: ${pct(m.query.move)} in ${m.query.days} days. Only the shape is compared — a smaller move, or one that took half or twice as long, can match. Found using what happened after both days.`));
+  note.append(textWithDates("span", {}, `Compared: from ${m.lead} day${m.lead === 1 ? "" : "s"} before to ${m.span} days after the day (${S.day}: ${pct(m.query.move)} in ${m.query.days} days). Only the shape counts — a smaller move, or one that took half or twice as long, can match. Found using what happened after both days.`));
 }
 function drawOwn(animate) {
   const rep = ex.replay(S.day, ex.last);
@@ -694,40 +698,60 @@ async function renderTogether() {
   jobs.push(loadTalk(coinNow().x, day0).then((t) => { got.hn = t; status.hn = "ok"; }).catch((e) => { status.hn = `could not be read (${e.message})`; }).then(draw));
   await Promise.allSettled(jobs);
 }
+/* two ways to read the same rows: dots (the default — an unusual day is a big dot, so a column of big dots is things moving together)
+   or lines (the shape of each window) */
 function drawTogether(day0, got, status) {
   const box = $("mt");
+  for (const b of $("mt-view").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.v === S.mtv));
+  const dots = S.mtv !== "lines";
   const W = Math.max(300, Math.round(box.getBoundingClientRect().width) - 12 || 360);
-  // iPhone first: the name and the day's value sit above each line, so every line gets the full width
-  const L = 6, R = 6, ROW = 44, LINE_TOP = 17, GROUP = 22, TOP = 2, AX = 22;
+  const L = 6, R = 6, ROW = dots ? 32 : 44, LINE_TOP = 17, GROUP = 22, TOP = dots ? 18 : 2, AX = 22;
   const n = MT_BEFORE + MT_AFTER + 1;
-  const X = (j) => L + (j / (n - 1)) * (W - L - R);
+  const X = (j) => L + 5 + (j / (n - 1)) * (W - L - R - 10);
+  // first pass: every row's values and unusual days (so the columns can be counted before drawing)
+  const rows = [];
+  for (const r of TOGETHER) {
+    if (r.group) { rows.push({ r }); continue; }
+    const st = status[r.k];
+    if (st && st !== "ok") { rows.push({ r, st }); continue; }
+    const { vals, back } = dailyOf(r, got, day0);
+    const win = vals.slice(back);
+    rows.push({ r, win, u: unusualOf(r, vals, back) });
+  }
+  const colCount = new Array(n).fill(0);
+  for (const x of rows) if (x.u) x.u.flags.forEach((f, j) => { if (f && x.win[j] !== null) colCount[j]++; });
   let H = TOP + AX;
-  for (const r of TOGETHER) H += r.group ? GROUP : ROW;
+  for (const x of rows) H += x.r.group ? GROUP : ROW;
   const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, "aria-hidden": "true" });
   const g = svg("g");
   root.append(g);
-  // the day itself, down every row
-  g.append(svg("rect", { x: X(MT_BEFORE) - 3, y: TOP, width: 6, height: H - TOP - AX, fill: "var(--wash)" }));
+  // the day itself, down every row; and in dots, every column where 3+ windows were unusual lights up
+  g.append(svg("rect", { x: X(MT_BEFORE) - 5, y: TOP, width: 10, height: H - TOP - AX, rx: 4, fill: "var(--wash)" }));
+  if (dots) {
+    colCount.forEach((cnt, j) => {
+      if (cnt < 3) return;
+      g.append(svg("rect", { x: X(j) - 5, y: TOP, width: 10, height: H - TOP - AX, rx: 4, fill: "var(--series-sel)", opacity: Math.min(0.32, 0.1 + 0.05 * cnt) }));
+      g.append(svg("text", { x: X(j), y: TOP - 5, "text-anchor": "middle", "font-size": 10.5, "font-weight": 800, fill: "var(--series-sel)" }, String(cnt)));
+    });
+  }
   let y = TOP;
   const around = [], later = [];
-  for (const r of TOGETHER) {
+  for (const x of rows) {
+    const r = x.r;
     if (r.group) {
       g.append(svg("text", { x: L, y: y + 16, "font-size": 10, "font-weight": 700, "letter-spacing": "0.06em", fill: "var(--muted)" }, r.group.toUpperCase()));
       y += GROUP;
       continue;
     }
-    const mid = y + LINE_TOP + (ROW - LINE_TOP) / 2;
+    const mid = dots ? y + 23 : y + LINE_TOP + (ROW - LINE_TOP) / 2;
     g.append(svg("line", { x1: L, x2: W - R, y1: y + ROW - 0.5, y2: y + ROW - 0.5, stroke: "var(--grid)", "stroke-width": 1, "shape-rendering": "crispEdges" }));
-    g.append(svg("text", { x: L, y: y + 13, "font-size": 11.5, "font-weight": r.main ? 700 : 600, fill: r.main ? "var(--ink)" : "var(--ink-2)" }, r.name()));
-    const st = status[r.k];
-    if (st && st !== "ok") {
-      g.append(svg("text", { x: L, y: mid + 4, "font-size": 11, fill: "var(--muted)" }, st === "wait" ? "…" : st.length > 48 ? st.slice(0, 47) + "…" : st));
+    g.append(svg("text", { x: L, y: y + 12, "font-size": 11.5, "font-weight": r.main ? 700 : 600, fill: r.main ? "var(--ink)" : "var(--ink-2)" }, r.name()));
+    if (x.st) {
+      g.append(svg("text", { x: L, y: mid + 4, "font-size": 11, fill: "var(--muted)" }, x.st === "wait" ? "…" : x.st.length > 48 ? x.st.slice(0, 47) + "…" : x.st));
       y += ROW;
       continue;
     }
-    const { vals, back } = dailyOf(r, got, day0);
-    const win = vals.slice(back);
-    const u = unusualOf(r, vals, back);
+    const { win, u } = x;
     const xs = win.filter((v) => v !== null);
     if (!xs.length) {
       const why = r.k === "fg" ? `the index starts on ${meta.fng_from || "2023-06-29"}` : r.k === "wiki" || r.k === "wikitotal" ? "Wikipedia's daily counts start on 2015-07-01" : "no values for these days";
@@ -735,23 +759,32 @@ function drawTogether(day0, got, status) {
       y += ROW;
       continue;
     }
-    const lo = Math.min(...xs), hi = Math.max(...xs);
-    const Y = (v) => (hi === lo ? mid : y + ROW - 4 - ((v - lo) / (hi - lo)) * (ROW - LINE_TOP - 6));
-    let d = "";
-    win.forEach((v, j) => { if (v !== null) d += (d ? "L" : "M") + X(j).toFixed(1) + "," + Y(v).toFixed(1); });
-    g.append(svg("path", { d, fill: "none", stroke: r.main ? "var(--series-d)" : "var(--ink-2)", "stroke-width": r.main ? 1.8 : 1.3, "stroke-linejoin": "round", "stroke-linecap": "round", opacity: r.main ? 1 : 0.85 }));
+    const color = r.main ? "var(--series-d)" : "var(--ink)";
+    if (dots) {
+      win.forEach((v, j) => {
+        if (v === null) return;
+        if (u.flags[j]) g.append(svg("circle", { cx: X(j), cy: mid, r: 4.3, fill: color }));
+        else g.append(svg("circle", { cx: X(j), cy: mid, r: 1.5, fill: "var(--axis)" }));
+      });
+    } else {
+      const lo = Math.min(...xs), hi = Math.max(...xs);
+      const Y = (v) => (hi === lo ? mid : y + ROW - 4 - ((v - lo) / (hi - lo)) * (ROW - LINE_TOP - 6));
+      let d = "";
+      win.forEach((v, j) => { if (v !== null) d += (d ? "L" : "M") + X(j).toFixed(1) + "," + Y(v).toFixed(1); });
+      g.append(svg("path", { d, fill: "none", stroke: r.main ? "var(--series-d)" : "var(--ink-2)", "stroke-width": r.main ? 1.8 : 1.3, "stroke-linejoin": "round", "stroke-linecap": "round", opacity: r.main ? 1 : 0.85 }));
+      win.forEach((v, j) => { if (u.flags[j] && v !== null) g.append(svg("circle", { cx: X(j), cy: Y(v), r: 3.4, fill: color, stroke: "var(--surface)", "stroke-width": 1.5 })); });
+    }
     win.forEach((v, j) => {
       if (!u.flags[j] || v === null) return;
-      g.append(svg("circle", { cx: X(j), cy: Y(v), r: 3.4, fill: r.main ? "var(--series-d)" : "var(--ink)", stroke: "var(--surface)", "stroke-width": 1.5 }));
       const o = j - MT_BEFORE;
-      if (Math.abs(o) <= 1) { if (!around.includes(r.name())) around.push(r.name()); } else if (o > 1 && !later.some((x) => x[0] === r.name())) later.push([r.name(), o]);
+      if (Math.abs(o) <= 1) { if (!around.includes(r.name())) around.push(r.name()); } else if (o > 1 && !later.some((z) => z[0] === r.name())) later.push([r.name(), o]);
     });
-    // on the right: what that window did on the day itself
+    // what that window did on the day itself
     const c = u.ch[MT_BEFORE];
     let lab = "—";
     if (win[MT_BEFORE] === null) lab = r.w && ["nasdaq", "vix", "usd"].includes(r.w) ? "closed" : "—";
     else if (c !== null && c !== undefined) lab = r.kind === "diff" ? `${c > 0 ? "+" : c < 0 ? MINUS : ""}${Math.abs(Math.round(c))}` : r.kind === "count" ? `${win[MT_BEFORE]}` : pct(Math.exp(c) - 1, 0);
-    g.append(svg("text", { x: W - R, y: y + 13, "text-anchor": "end", "font-size": 11.5, "font-weight": 650, fill: u.flags[MT_BEFORE] ? "var(--ink)" : "var(--muted)", style: "font-variant-numeric:tabular-nums" }, `the day ${lab}`));
+    g.append(svg("text", { x: W - R, y: y + 12, "text-anchor": "end", "font-size": 11.5, "font-weight": 650, fill: u.flags[MT_BEFORE] ? "var(--ink)" : "var(--muted)", style: "font-variant-numeric:tabular-nums" }, `the day ${lab}`));
     y += ROW;
   }
   for (const o of [-7, 0, 7, 14, 30]) {
@@ -759,7 +792,7 @@ function drawTogether(day0, got, status) {
   }
   box.textContent = "";
   box.append(root);
-  const waiting = Object.values(status).some((x) => x === "wait");
+  const waiting = Object.values(status).some((z) => z === "wait");
   const sum = $("mt-sum");
   if (waiting) { sum.textContent = ""; return; }
   const parts = [];
@@ -767,8 +800,120 @@ function drawTogether(day0, got, status) {
   else if (around.length === 1) parts.push(`Around the day (−1 to +1), only ${around[0]} had an unusual day.`);
   else parts.push(`Around the day (−1 to +1), these had an unusual day: ${around.join(", ")}.`);
   if (later.length) parts.push(`Later: ${later.map(([nme, o]) => `${nme} (+${o}d)`).join(", ")}.`);
+  const busiest = Math.max(...colCount);
+  if (busiest >= 3) parts.push(`The most at once: ${busiest} windows, on ${colCount.map((c, j) => (c === busiest ? j - MT_BEFORE : null)).filter((o) => o !== null).map((o) => (o === 0 ? "the day" : o > 0 ? `+${o}d` : `${MINUS}${-o}d`)).join(", ")}.`);
   sum.textContent = parts.join(" ");
-  $("mt-note").textContent = "Each line is scaled to its own range, so heights cannot be compared across rows. Markets are closed at weekends. “The day”: what each window did on the day itself, against the day before.";
+  $("mt-note").textContent = dots
+    ? "A big dot is an unusual day for that window; a small dot is an ordinary one. A lit column: three or more windows were unusual on the same day. “The day”: what each window did on the day itself, against the day before."
+    : "Each line is scaled to its own range, so heights cannot be compared across rows. Markets are closed at weekends. “The day”: what each window did on the day itself, against the day before.";
+}
+
+/* ── When things moved together (hindsight): over the coin's whole history, the days when the most windows were unusual at once.
+   RE: does not choose which windows should go together — it counts, and shows which ones did (Nova, 2026-09-28).
+   Hacker News counts are left out here (they can only be read a month at a time). ── */
+function fullDaily(row, got) {
+  const tl = ex.tl, n = tl.n;
+  const out = new Array(n).fill(null);
+  if (row.k === "price" || row.k === "fg") {
+    const a = row.k === "price" ? tl.axes.price : tl.axes.sentiment;
+    for (let i = 0; i + 1 < n; i++) { const v = a[i + 1]; out[i] = Number.isNaN(v) ? null : v; }
+    return out;
+  }
+  const s = got[row.w];
+  if (!s) return out;
+  const off = dayNum(s.from) - tl.d0;
+  for (let i = 0; i < n; i++) {
+    const k = i - off;
+    const v = k >= 0 && k < s.values.length ? s.values[k] : null;
+    out[i] = typeof v === "number" && Number.isFinite(v) ? v : null;
+  }
+  return out;
+}
+/* the same rule as Moved together?: a change ≥ 3× the usual change of the year before (1.4826 × median |change|, refreshed weekly) */
+function fullFlags(row, vals) {
+  const n = vals.length;
+  const ch = new Array(n).fill(null);
+  let prev = null;
+  for (let i = 0; i < n; i++) {
+    const v = vals[i];
+    if (v === null) continue;
+    if (prev !== null) ch[i] = row.kind === "log" ? (v > 0 && prev > 0 ? Math.log(v / prev) : null) : v - prev;
+    prev = v;
+  }
+  const flags = new Int8Array(n), z = new Float64Array(n);
+  let sigma = null, lastAt = -Infinity;
+  for (let i = 0; i < n; i++) {
+    if (i - lastAt >= 7) {
+      const base = [];
+      for (let j = Math.max(0, i - 365); j < i; j++) if (ch[j] !== null) base.push(Math.abs(ch[j]));
+      if (base.length >= 30) { base.sort((a, b) => a - b); sigma = 1.4826 * base[base.length >> 1]; } else sigma = null;
+      lastAt = i;
+    }
+    const c = ch[i];
+    if (c === null || !sigma) continue;
+    const zz = Math.abs(c) / sigma;
+    if (zz >= 3) { flags[i] = c > 0 ? 1 : -1; z[i] = zz; }
+  }
+  return { flags, z };
+}
+const togetherCache = new Map(); // coin → Promise<days>
+function togetherDays() {
+  const coin = S.coin;
+  if (togetherCache.has(coin)) return togetherCache.get(coin);
+  const p = (async () => {
+    const rows = TOGETHER.filter((r) => r.k && r.k !== "hn");
+    const got = {};
+    await Promise.allSettled(rows.filter((r) => r.w).map((r) => loadSeries(r.w).then((s) => { got[r.w] = s; })));
+    const per = rows.map((r) => { const vals = fullDaily(r, got); return { r, name: r.name(), vals, ...fullFlags(r, vals) }; });
+    const n = ex.tl.n;
+    const found = [];
+    for (let i = 0; i + 1 < n; i++) {
+      let avail = 0, score = 0;
+      const hit = [];
+      for (const q of per) {
+        if (q.vals[i] === null && q.vals[i + 1] === null) continue;
+        avail++;
+        const f = q.flags[i] ? i : q.flags[i + 1] ? i + 1 : -1; // a window may answer a day late
+        if (f >= 0) { hit.push(q); score += Math.min(q.z[f], 12); }
+      }
+      if (avail >= 4 && hit.length >= 2) found.push({ i, day: ymdOf(ex.tl.d0 + i), count: hit.length, avail, names: hit.map((q) => q.name), price: hit.some((q) => q.r.k === "price"), score });
+    }
+    found.sort((a, b) => b.count - a.count || b.score - a.score);
+    const out = [];
+    for (const f of found) {
+      if (out.every((o) => Math.abs(o.i - f.i) >= 14)) out.push(f);
+      if (out.length === 8) break;
+    }
+    return { days: out, missing: rows.filter((r) => r.w && !got[r.w]).map((r) => r.name()) };
+  })();
+  p.catch(() => togetherCache.delete(coin));
+  togetherCache.set(coin, p);
+  return p;
+}
+let togetherToken = 0;
+async function renderTogetherList() {
+  const box = $("t-rows");
+  const token = ++togetherToken;
+  box.textContent = "";
+  box.append(el("p", { class: "empty" }, "Looking through every window, every day…"));
+  let res2;
+  try { res2 = await togetherDays(); } catch (e) {
+    if (token !== togetherToken) return;
+    box.textContent = "";
+    box.append(el("p", { class: "empty" }, `Could not be counted this time (${e.message}).`));
+    return;
+  }
+  if (token !== togetherToken || S.view !== "home" || S.t !== "market") return;
+  box.textContent = "";
+  if (!res2.days.length) { box.append(el("p", { class: "empty" }, "No day had two or more windows unusual at once.")); return; }
+  res2.days.forEach((f, i) => {
+    const b = el("button", { type: "button", class: "row", style: `animation-delay:${i * 0.03}s`, "aria-label": `${f.day}, ${f.count} of ${f.avail} windows unusual` });
+    b.append(whenCell(f.day), el("span", { class: "go" }, `${f.count} of ${f.avail}`), el("span", { class: "chev", "aria-hidden": "true" }, "›"));
+    b.append(el("span", { class: "hist" }, f.names.join(" · ")));
+    b.addEventListener("click", () => { S.q = ""; standOn(f.day); });
+    box.append(b);
+  });
+  if (res2.missing.length) box.append(el("p", { class: "empty" }, `Not counted this time: ${res2.missing.join(", ")} (could not be read).`));
 }
 function checksInto(box, rep) {
   box.textContent = "";
@@ -796,6 +941,7 @@ function renderSimilar() {
     b.setAttribute("aria-pressed", String(w === S.width));
     b.disabled = S.mode === "TRAJECTORY" && w < 2;
   }
+  $("look-sub").textContent = `where ${sym()} stood over ${S.width === 1 ? "the day itself (at 00:00)" : `the ${S.width} days up to the day`}, compared day by day`;
   $("found").textContent = "";
   const box = $("results");
   box.textContent = "";
@@ -881,6 +1027,7 @@ function renderPast() {
     : "The market says these two days felt the same. Look at both through the same windows, as each looked at 00:00 UTC.";
   $("k-d").textContent = S.day;
   $("k-p").textContent = r.day;
+  renderCompared(r);
   renderPair(r);
   // what happened next stays sealed until it is opened
   const open = revealed.has(`${S.coin}|${S.day}|${r.day}`);
@@ -925,6 +1072,103 @@ function drawNext(r, animate) {
     : mine
     ? `You opened what came after ${S.day} yourself, so both lines go on.`
     : `After ${S.day} the line stops: on that day, nobody knew what came next.` + (r.later ? ` ${r.day} is later in history, so everything shown for it happened after your day.` : "");
+}
+
+/* ── what was compared: the two ranges of days, drawn as two lines on the same axis ──
+   Looked alike (STATE): the price's place within its own past year, day by day (RE: compares every part of the market; the price stands for them here).
+   Looked alike (TRAJECTORY): the price path from the window's first day.
+   Moved alike: the shape of the price, each line on its own scale (the other day stretched to the same length) */
+function comparedOf(r) {
+  const tl = ex.tl, P = tl.axes.price;
+  const q = dayNum(S.day) - tl.d0, c = r.index;
+  const day = (i) => ymdOf(tl.d0 + i);
+  if (r.kind === "w") return { title: `Found by the word “${S.q}”, not by the market — nothing was compared.`, lines: null };
+  if (r.kind === "v") {
+    const m = movesNow();
+    const k = r.stretch;
+    const a0 = q - m.lead, a1 = q + m.span;
+    const b0 = c - Math.max(1, Math.round(m.lead * k)), b1 = c + Math.max(1, Math.round(m.span * k));
+    const N = 40;
+    const shape = (a, b) => {
+      const out = [];
+      for (let j = 0; j < N; j++) {
+        const t = a + ((b - a) * j) / (N - 1), x0 = Math.floor(t), x1 = Math.min(b, x0 + 1), f = t - x0;
+        const v = P[x0] > 0 && P[x1] > 0 ? Math.log(P[x0]) * (1 - f) + Math.log(P[x1]) * f : NaN;
+        out.push(v);
+      }
+      const ok = out.filter((v) => !Number.isNaN(v));
+      const mean = ok.reduce((s, v) => s + v, 0) / ok.length;
+      const sd = Math.sqrt(ok.reduce((s, v) => s + (v - mean) ** 2, 0) / ok.length) || 1;
+      return out.map((v) => (Number.isNaN(v) ? null : (v - mean) / sd));
+    };
+    return {
+      title: `Compared: the shape of the price from ${m.lead} day${m.lead === 1 ? "" : "s"} before to ${m.span} days after each day${k !== 1 ? ` (that day's move took ${k < 1 ? "half" : "twice"} as long, so its days are squeezed or stretched to fit)` : ""}.`,
+      ranges: [[day(a0), day(a1)], [day(b0), day(b1)]],
+      lines: [shape(a0, a1), shape(b0, b1)],
+      mark: m.lead / (m.lead + m.span),
+      axis: [`${MINUS}${m.lead}d`, "the day", `+${m.span}d`],
+      note: "Shape only: each line is on its own scale.",
+    };
+  }
+  const w = res.width;
+  if (w === 1) return { title: `Compared: the day itself, as it stood at 00:00 UTC (a 1-day window) — every part of the market, at once.`, ranges: [[S.day, S.day], [r.day, r.day]], lines: null };
+  const traj = res.mode === "TRAJECTORY";
+  const line = (e) => {
+    const out = [];
+    for (let i = e - w + 1; i <= e; i++) {
+      if (traj) out.push(P[i] > 0 && P[e - w + 1] > 0 ? P[i] / P[e - w + 1] - 1 : null);
+      else { const v = ex.st.value.price[i]; out.push(Number.isNaN(v) ? null : v); }
+    }
+    return out;
+  };
+  return {
+    title: traj ? `Compared: how the market moved over the ${w} days up to each day.` : `Compared: where the market stood over the ${w} days up to each day, day by day.`,
+    ranges: [[day(q - w + 1), S.day], [day(c - w + 1), r.day]],
+    lines: [line(q), line(c)],
+    mark: 1,
+    axis: [`${MINUS}${w - 1}d`, "", "the day"],
+    note: traj ? "The price's change from the first day of each range (RE: also compares volume, volatility and Fear & Greed)." : "The price's place within its own past year: 0 = its lowest, 1 = its highest (RE: compares every part of the market this way; the price stands for them here).",
+    fixed01: !traj,
+  };
+}
+function renderCompared(r) {
+  const box = $("p-cmp");
+  box.textContent = "";
+  const cmp = comparedOf(r);
+  box.append(el("p", { class: "t" }, cmp.title));
+  if (cmp.ranges) {
+    const rr = el("div", { class: "r" });
+    cmp.ranges.forEach(([a, b], j) => {
+      const sp = el("span");
+      sp.append(el("i", { style: `background:var(${j ? "--series-sel" : "--series-d"})` }), document.createTextNode(a === b ? a : `${a} → ${b}`));
+      rr.append(sp);
+    });
+    box.append(rr);
+  }
+  if (!cmp.lines) return;
+  const W = Math.max(280, Math.round(box.getBoundingClientRect().width) - 24 || 330), H = 96;
+  const m = { l: 4, r: 4, t: 8, b: 18 };
+  const all = cmp.lines.flat().filter((v) => v !== null);
+  let lo = cmp.fixed01 ? 0 : Math.min(...all), hi = cmp.fixed01 ? 1 : Math.max(...all);
+  if (hi - lo < 1e-9) { lo -= 0.5; hi += 0.5; }
+  const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, "aria-hidden": "true" });
+  const n = cmp.lines[0].length;
+  const X = (j) => m.l + (n === 1 ? 0.5 : j / (n - 1)) * (W - m.l - m.r);
+  const Y = (v) => m.t + (1 - (v - lo) / (hi - lo)) * (H - m.t - m.b);
+  if (cmp.mark !== undefined) {
+    const xm = m.l + cmp.mark * (W - m.l - m.r);
+    root.append(svg("line", { x1: xm, x2: xm, y1: m.t - 4, y2: H - m.b, stroke: "var(--axis)", "stroke-width": 1, "shape-rendering": "crispEdges" }));
+  }
+  cmp.lines.forEach((ln, j) => {
+    let d = "";
+    ln.forEach((v, i) => { if (v !== null) d += (d && ln[i - 1] !== null ? "L" : "M") + X(i).toFixed(1) + "," + Y(v).toFixed(1); });
+    root.append(svg("path", { d, fill: "none", stroke: `var(${j ? "--series-sel" : "--series-d"})`, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+  });
+  const [l0, l1, l2] = cmp.axis;
+  root.append(svg("text", { x: m.l, y: H - 4, "font-size": 10.5, fill: "var(--muted)" }, l0));
+  if (l1) root.append(svg("text", { x: m.l + cmp.mark * (W - m.l - m.r), y: H - 4, "text-anchor": "middle", "font-size": 10.5, "font-weight": 700, fill: "var(--ink-2)" }, l1));
+  root.append(svg("text", { x: W - m.r, y: H - 4, "text-anchor": "end", "font-size": 10.5, "font-weight": l2 === "the day" ? 700 : 400, fill: l2 === "the day" ? "var(--ink-2)" : "var(--muted)" }, l2));
+  box.append(root, el("p", { class: "n" }, cmp.note));
 }
 
 /* both days through the same windows, each as it looked at its own 00:00 UTC. RE: does not grade them */

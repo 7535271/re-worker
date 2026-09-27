@@ -489,6 +489,14 @@
   .mt svg { display: block; width: 100%; height: auto; }
   .mt-sum { margin: 10px 2px 0; font-size: 14px; line-height: 1.4; color: var(--ink); }
   .mt-sum:empty { display: none; }
+  .pcmp { margin: 0 0 12px; background: var(--surface); border-radius: 16px; box-shadow: 0 0 0 1px var(--ring); padding: 12px 12px 8px; }
+  .pcmp:empty { display: none; }
+  .pcmp .t { margin: 0 0 6px; font-size: 13px; font-weight: 650; color: var(--ink); }
+  .pcmp .r { display: flex; flex-direction: column; gap: 2px; margin: 0 0 6px; font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .pcmp .r span { display: inline-flex; align-items: center; gap: 6px; }
+  .pcmp .r i { display: inline-block; width: 8px; height: 8px; border-radius: 999px; }
+  .pcmp svg { display: block; width: 100%; height: auto; }
+  .pcmp .n { margin: 4px 0 0; font-size: 11.5px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -506,12 +514,20 @@
     </section>
     <div id="coins" class="coins" role="group" aria-label="Which market"></div>
     <div id="entry" class="seg entry" role="group" aria-label="Start from">
-      <button type="button" data-t="world">From the world</button>
       <button type="button" data-t="market">From the market</button>
+      <button type="button" data-t="world">From the world</button>
     </div>
     <div id="status-home" aria-live="polite"></div>
 
-    <section id="e-world" class="entrance" aria-label="From the world">
+    <section id="e-market" class="entrance" aria-label="From the market">
+      <div class="list-head"><h2>When things moved together</h2><span class="quiet-inline">the days when the most windows were unusual at once — <span class="coin-sym">BTC</span>, attention, money, the world · found with hindsight</span></div>
+      <div id="t-rows" class="rows"></div>
+      <div class="list-head" style="margin-top:22px"><h2>When <span class="coin-sym">BTC</span> moved the most</h2><span class="quiet-inline">in one day, 00:00 to 00:00 UTC · found with hindsight</span></div>
+      <div id="m-rows" class="rows"></div>
+      <button id="pick-day" class="row-link" type="button">Or pick any day <span aria-hidden="true">›</span></button>
+    </section>
+
+    <section id="e-world" class="entrance" aria-label="From the world" hidden>
       <form id="ask" class="ask" role="search">
         <input id="q" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="40" placeholder="A word, a topic, an event" aria-label="A word, topic or event, in English">
         <button type="submit">Find</button>
@@ -520,12 +536,6 @@
       <div class="list-head"><h2 id="w-title"></h2><span id="w-found" class="quiet-inline"></span></div>
       <div id="w-rows" class="rows" hidden></div>
       <p id="w-how" class="quiet"></p>
-    </section>
-
-    <section id="e-market" class="entrance" aria-label="From the market" hidden>
-      <div class="list-head"><h2>When <span class="coin-sym">BTC</span> moved the most</h2><span class="quiet-inline">in one day, 00:00 to 00:00 UTC · found with hindsight</span></div>
-      <div id="m-rows" class="rows"></div>
-      <button id="pick-day" class="row-link" type="button">Or pick any day <span aria-hidden="true">›</span></button>
     </section>
 
     <button id="how-link" class="row-link obs" type="button"><span class="obs-t">Observatory<small>Every number behind RE:, window by window</small></span><span aria-hidden="true">›</span></button>
@@ -561,16 +571,17 @@
       <button id="s-seal" class="seal" type="button"><span>Open what happened next</span><small id="s-seal-note"></small></button>
       <div id="s-next" hidden>
         <div id="s-checks" class="checks"></div>
+        <h3 class="subhead">Moved together?</h3>
+        <p class="lead">The same days, one row per window. A big dot is a day that was unusual for that window, compared with its own past year. Where dots line up down a column, things moved together. Hindsight.</p>
+        <div id="mt-view" class="seg mini" role="group" aria-label="Show as"><button type="button" data-v="dots">Dots</button><button type="button" data-v="lines">Lines</button></div>
+        <div id="mt" class="mt" role="img" aria-label="Moved together: one row per window over the same days"></div>
+        <p id="mt-sum" class="mt-sum" aria-live="polite"></p>
+        <p id="mt-note" class="quiet"></p>
         <div class="chart-wrap">
           <svg id="s-chart" viewBox="0 0 360 230" role="img" tabindex="0" aria-label="Price change after the day"></svg>
           <div id="s-tip" class="tip" aria-hidden="true"></div>
         </div>
         <p id="s-after" class="quiet"></p>
-        <h3 class="subhead">Moved together?</h3>
-        <p class="lead">The same days, one line per window. A dot marks a day that was unusual for that window, compared with its own past year. Hindsight.</p>
-        <div id="mt" class="mt" role="img" aria-label="Moved together: one line per window over the same days"></div>
-        <p id="mt-sum" class="mt-sum" aria-live="polite"></p>
-        <p id="mt-note" class="quiet"></p>
         <h3 class="subhead">The day itself, as recorded now</h3>
         <p class="lead">None of this could be seen at 00:00. RE: never uses it to find look-alike days.</p>
         <div id="h-tiles" class="tiles"></div>
@@ -593,7 +604,7 @@
         <div class="list-head"><h3 id="s-moments-title"></h3><span class="quiet-inline">the same word, another time</span></div>
         <div id="s-moments" class="rows"></div>
       </div>
-      <div class="list-head state-head"><h3>Looked like this at 00:00</h3><span class="quiet-inline">where <span class="coin-sym">BTC</span> stood before the day · <span id="found"></span></span></div>
+      <div class="list-head state-head"><h3>Looked like this at 00:00</h3><span id="look-sub" class="quiet-inline"></span><span id="found" class="quiet-inline"></span></div>
       <div id="s-width" class="seg mini" role="group" aria-label="Alike over"></div>
       <div id="status" aria-live="polite"></div>
       <div id="results" class="rows"></div>
@@ -615,6 +626,7 @@
     <section class="block" aria-label="Was it really alike?">
       <h2>Was it really alike?</h2>
       <p id="p-lead" class="lead"></p>
+      <div id="p-cmp" class="pcmp"></div>
       <div class="pairkey"><span><i style="background:var(--series-d)"></i><b id="k-d"></b> your day</span><span><i style="background:var(--series-sel)"></i><b id="k-p"></b> that day</span></div>
       <div id="p-tiles" class="tiles"></div>
       <div id="p-open" class="opened" aria-live="polite"></div>
