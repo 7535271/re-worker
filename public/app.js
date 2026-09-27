@@ -31,8 +31,8 @@ const COINS = [
 ];
 const coinNow = () => COINS.find((c) => c.id === S.coin) || COINS[0];
 const sym = () => coinNow().sym;
-/* words to try from the world side (Stella's picks, to be changed freely) */
-const WORDS = ["pandemic", "war", "election", "bank", "hack"];
+/* words to try from the world side: light, curious things, not the news (Nova, 2026-09-27) */
+const WORDS = [["eclipse", "eclipse"], ["iphone", "iPhone"], ["ai", "AI"], ["space", "space"], ["bitcoin", "bitcoin"]];
 
 const VIEWS = ["home", "stand", "past", "how"];
 const S = {
@@ -226,9 +226,9 @@ function setupControls() {
     if (q) go({ q }, S.q !== q);
   });
   const words = $("words");
-  for (const w of WORDS) {
-    const b = el("button", { type: "button", "data-q": w }, w);
-    b.addEventListener("click", () => { $("q").value = w; go({ q: w }, S.q !== w); });
+  for (const [w, label] of WORDS) {
+    const b = el("button", { type: "button", "data-q": w }, label);
+    b.addEventListener("click", () => { $("q").value = label; go({ q: w }, S.q !== w); });
     words.append(b);
   }
   $("pick-day").addEventListener("click", () => go({ view: "stand", open: null }));
@@ -380,14 +380,14 @@ function loadMoments(q) {
 let worldToken = 0;
 async function renderWorld() {
   const input = $("q");
-  if (document.activeElement !== input) input.value = S.q;
+  if (document.activeElement !== input && normWord(input.value) !== S.q) input.value = S.q;
   for (const b of $("words").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.q === S.q));
   const rows = $("w-rows"), title = $("w-title"), found = $("w-found"), how = $("w-how");
   if (!S.q) {
     title.textContent = "";
     found.textContent = "";
     rows.hidden = true;
-    how.textContent = "Type what was happening — or tap a word. RE: finds the days it was happening in the world.";
+    how.textContent = "Enter a word, topic, or event. RE: finds the days it left traces in the world — in what people read on Wikipedia and voted up on Hacker News.";
     return;
   }
   const token = ++worldToken;
@@ -395,7 +395,7 @@ async function renderWorld() {
   found.textContent = "looking…";
   rows.hidden = false;
   rows.textContent = "";
-  rows.append(el("p", { class: "empty" }, "Looking through Wikipedia and Hacker News…"));
+  rows.append(el("p", { class: "empty" }, "Looking for its traces on Wikipedia and Hacker News…"));
   how.textContent = "";
   let body;
   try { body = await loadMoments(S.q); } catch (e) {
@@ -410,10 +410,10 @@ async function renderWorld() {
   const before = body.moments.length - list.length;
   found.textContent = list.length ? `${list.length} moment${list.length === 1 ? "" : "s"}` + (before ? ` · ${before} before ${sym()}'s history` : "") : "";
   rows.textContent = "";
-  if (!list.length) rows.append(el("p", { class: "empty" }, body.moments.length ? `Found only before ${sym()}'s history begins (${ex.first}).` : "Nothing stood out. Try another word, in English."));
+  if (!list.length) rows.append(el("p", { class: "empty" }, body.moments.length ? `Found only before ${sym()}'s history begins (${ex.first}).` : "No traces stood out. Try another word, in English."));
   list.forEach((m, i) => rows.append(momentRow(m, i, () => standOn(m.day))));
   how.textContent = "";
-  how.append(textWithDates("span", {}, `Found with today's records. When you stand on one of these days, you see only what was out by its 00:00 UTC.${body.article ? ` Wikipedia: “${body.article.title}”.` : ""}`));
+  how.append(textWithDates("span", {}, `Public traces, found with today's records — not a list of events. When you stand on one of these days, you see only what was out by its 00:00 UTC.${body.article ? ` Wikipedia: “${body.article.title}”.` : ""}`));
 }
 function momentRow(m, i, onTap, compact = false) {
   const b = el("button", { type: "button", class: "row moment", style: `animation-delay:${i * 0.04}s` });
