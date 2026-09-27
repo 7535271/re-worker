@@ -1585,6 +1585,52 @@ async function seriesAttention(today, article = "Bitcoin") {
   while (last >= 0 && values[last] === null) last--;
   return { from: "2015-07-01", values: values.slice(0, last + 1), unit: "views per day (people, not bots)", article, source: `Wikimedia pageviews: en.wikipedia '${article.replace(/_/g, " ")}'` };
 }
+/* all of English Wikipedia, people not bots: how much the world was reading that day */
+async function seriesWikiTotal(today) {
+  const r = await look(`${WIKI}/aggregate/en.wikipedia/all-access/user/daily/2015070100/${ymdCompact(today)}00`, { timeoutMs: 12000 });
+  const items = r.response.body && Array.isArray(r.response.body.items) ? r.response.body.items : null;
+  if (!items || !items.length) return { error: String(errOf(r) || `HTTP ${r.response.http_status}`).slice(0, 200) };
+  const d0 = dayNum("2015-07-01");
+  const n = dayNum(today) - d0 + 1;
+  const values = new Array(n).fill(null);
+  for (const it of items) {
+    const t = it.timestamp;
+    const i = Date.UTC(+t.slice(0, 4), +t.slice(4, 6) - 1, +t.slice(6, 8)) / DAY - d0;
+    if (i >= 0 && i < n && typeof it.views === "number") values[i] = it.views;
+  }
+  let last = n - 1;
+  while (last >= 0 && values[last] === null) last--;
+  return { from: "2015-07-01", values: values.slice(0, last + 1), unit: "views per day, all of English Wikipedia (people, not bots)", source: "Wikimedia pageviews: en.wikipedia, all articles" };
+}
+/* FRED (St. Louis Fed) keeps daily market closes as a plain CSV, no key. Market holidays and weekends are empty */
+const FRED_SERIES = {
+  nasdaq: { id: "NASDAQCOM", unit: "Nasdaq Composite index, daily close", name: "Nasdaq" },
+  vix: { id: "VIXCLS", unit: "CBOE Volatility Index (VIX), daily close", name: "VIX" },
+  usd: { id: "DTWEXBGS", unit: "US dollar against a broad basket of currencies (Fed index)", name: "US dollar" },
+};
+async function seriesFred(w, today) {
+  const f = FRED_SERIES[w];
+  const r = await fetchText(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${f.id}`, 12000);
+  if (!r.ok || !r.text) return { error: (r.error || `HTTP ${r.status}`).slice(0, 200) };
+  const d0 = dayNum(SERIES_FROM);
+  const n = dayNum(today) - d0 + 1;
+  const values = new Array(n).fill(null);
+  let seen = 0;
+  // lines look like "2020-03-12,6497.86"; a missing day is "." (or empty)
+  for (const line of r.text.split("\n")) {
+    if (line.length < 12 || line.charCodeAt(4) !== 45) continue;
+    const i = dayNum(line.slice(0, 10)) - d0;
+    if (i < 0 || i >= n) continue;
+    const v = Number(line.slice(11));
+    if (line.slice(11).trim() === "." || !Number.isFinite(v)) continue;
+    values[i] = v;
+    seen++;
+  }
+  if (!seen) return { error: "FRED answered, but no values could be read" };
+  let last = n - 1;
+  while (last >= 0 && values[last] === null) last--;
+  return { from: SERIES_FROM, values: values.slice(0, last + 1), unit: f.unit, source: `FRED ${f.id} (St. Louis Fed)` };
+}
 async function seriesChain(chart, today) {
   // timespan=all はプローブで確かめた形（2009年からの全部。SERIES_FROM より前は捨てる）
   const r = await look(`${CHAIN}/${chart}?timespan=all&format=json&sampled=false`, { timeoutMs: 12000 });
@@ -1616,8 +1662,12 @@ async function seriesWeather(place, today) {
 }
 async function windowSeries(env, url) {
   const w = url.searchParams.get("w");
-  const lagOf = { attention: WINDOW_TIME.wikipedia_en.as_of_lag, tx: WINDOW_TIME.bitcoin_network.as_of_lag, hash: WINDOW_TIME.bitcoin_network.as_of_lag, weather: WINDOW_TIME.weather.as_of_lag };
-  if (!(w in lagOf)) return out({ error: "bad parameters", problems: ["w must be attention, tx, hash or weather"], example: "/window-series?w=attention" }, 400);
+  const lagOf = {
+    attention: WINDOW_TIME.wikipedia_en.as_of_lag, tx: WINDOW_TIME.bitcoin_network.as_of_lag, hash: WINDOW_TIME.bitcoin_network.as_of_lag, weather: WINDOW_TIME.weather.as_of_lag,
+    // for "Moved together?" (2026-09-28): the whole of English Wikipedia, and three financial markets from FRED (a US close is out by the next 00:00 UTC)
+    wikitotal: WINDOW_TIME.wikipedia_en.as_of_lag, nasdaq: 1, vix: 1, usd: 1,
+  };
+  if (!(w in lagOf)) return out({ error: "bad parameters", problems: [`w must be one of ${Object.keys(lagOf).join(", ")}`], example: "/window-series?w=attention" }, 400);
   const place = w === "weather" ? placeOf(url) : null;
   if (w === "weather" && (!place || place.bad)) return out({ error: "bad parameters", problems: ["weather needs lat (−90…90) and lon (−180…180)"], example: "/window-series?w=weather&lat=35.68&lon=139.69&place=Tokyo" }, 400);
   // Attention follows the asset you chose (its English Wikipedia article); the other windows do not
@@ -1634,6 +1684,8 @@ async function windowSeries(env, url) {
   const body = w === "attention" ? await seriesAttention(today, ASSETS[aid].wiki)
     : w === "tx" ? await seriesChain("n-transactions", today)
     : w === "hash" ? await seriesChain("hash-rate", today)
+    : w === "wikitotal" ? await seriesWikiTotal(today)
+    : FRED_SERIES[w] ? await seriesFred(w, today)
     : await seriesWeather(place, today);
   if (body.error) return out({ error: `the ${w} window could not be read this time`, detail: body.error }, 502);
   const text = JSON.stringify({ w, as_of_lag: lagOf[w], generated_at: iso(nowMs()), ...body });
@@ -1737,6 +1789,39 @@ function pickMoments(wiki, hn) {
   const top = [...merged].sort((a, b) => b.score - a.score).slice(0, MOMENTS_MAX);
   return top.sort((a, b) => (a.day < b.day ? -1 : 1)).map((m) => ({ day: m.day, score: m.score, wiki: m.wiki, hn: m.hn }));
 }
+/* ──────────────────────────────────────────
+   HN でそのコインが話された量（/talk?q=bitcoin&day=YYYY-MM-DD）— Moved together? の1行
+   day の7日前から30日後まで、タイトルにその言葉がある記事（story）の数を日ごとに数える。後知恵
+   ────────────────────────────────────────── */
+const TALK_V = "v1";
+async function talk(env, url) {
+  const q = momentsQuery(url.searchParams.get("q"));
+  const day = url.searchParams.get("day") || "";
+  if (!q || !isDay(day)) return out({ error: "bad parameters", problems: ["q must be a word, day must be YYYY-MM-DD"], example: "/talk?q=bitcoin&day=2020-03-12" }, 400);
+  const ns = env.RE_CACHE || null;
+  const key = `talk:${TALK_V}:${q}:${day}`;
+  const send = (text, how) => new Response(text, { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-RE-Talk": how, ...CORS } });
+  if (ns) { const hit = await ns.get(key); if (hit) return send(hit, "archive"); }
+  const from = shiftDay(day, -7), to = shiftDay(day, 30);
+  const a = Date.parse(from + "T00:00:00Z") / 1000, b = Date.parse(shiftDay(to, 1) + "T00:00:00Z") / 1000;
+  const r = await look(`${HN}/search_by_date?${new URLSearchParams({ query: q, tags: "story", hitsPerPage: "1000", attributesToRetrieve: "title,created_at_i", attributesToHighlight: "none", numericFilters: `created_at_i>=${a},created_at_i<${b}` })}`, { timeoutMs: 10000 });
+  const hits = r.response.body && r.response.body.hits;
+  if (!Array.isArray(hits)) return out({ error: "Hacker News could not be searched this time", detail: errOf(r) || `HTTP ${r.response.http_status}` }, 502);
+  const has = titleHas(q);
+  const counts = new Array(38).fill(0);
+  const d0 = dayNum(from);
+  for (const h of hits) {
+    if (!h || typeof h.created_at_i !== "number" || !has(h.title)) continue;
+    const i = Math.floor(h.created_at_i / 86400) - d0;
+    if (i >= 0 && i < 38) counts[i]++;
+  }
+  const today = dayKey(iso(nowMs()));
+  const settled = to <= shiftDay(today, -3);
+  const text = JSON.stringify({ q, day, from, to, counts, capped: hits.length >= 1000, unit: `Hacker News stories with “${q}” in the title, per UTC day`, settled });
+  if (ns) { try { await ns.put(key, text, settled ? {} : { expirationTtl: 3600 }); } catch (e) { console.error("talk cache", e); } }
+  return send(text, "fresh");
+}
+
 async function moments(env, url) {
   const q = momentsQuery(url.searchParams.get("q"));
   if (!q) return out({ error: "bad parameters", problems: ["q must be 2–40 letters, numbers or spaces"], example: "/moments?q=pandemic" }, 400);
@@ -1897,7 +1982,8 @@ export default {
             "/series?id=1 — every stored day for one asset, from the archive (no CMC call). ids: 1 BTC, 1027 ETH, 52 XRP, 5426 SOL, 74 DOGE. Optional &from=2020&to=2024 (years)",
             "/scene?day=YYYY-MM-DD — the same day through other windows: Wikipedia (en, ja), Hacker News, NASA APOD, earthquakes, ECB rates, the Bitcoin network, and a door to X search. window_time says, per window, when it is observed, published and revised, and how many days back it was visible at D 00:00 UTC (as_of_lag). Add &lat=&lon=&place= for the weather at one place",
             "/moments?q=eclipse — the days a word, topic or event left public traces, found with today's records: the day its English Wikipedia article peaked (from 2015-07-01) and the day a Hacker News story with it in the title got the most points (from 2013). Traces, not an event detector. Kept 1 day",
-            "/window-series?w=attention|tx|hash|weather — every day's value of one numeric window (Wikipedia views of the asset's article — &id= as in /series, default Bitcoin — Bitcoin transactions, hash rate, or the weather at &lat=&lon=&place=), kept 6 hours. The value on a day is what happened that day; at D 00:00 UTC only D − as_of_lag was out",
+            "/talk?q=bitcoin&day=2020-03-12 — Hacker News stories with the word in the title, per day, from 7 days before to 30 days after (hindsight)",
+            "/window-series?w=attention|tx|hash|weather|wikitotal|nasdaq|vix|usd — every day's value of one numeric window (Wikipedia views of the asset's article — &id= as in /series, default Bitcoin — Bitcoin transactions, hash rate, or the weather at &lat=&lon=&place=), kept 6 hours. The value on a day is what happened that day; at D 00:00 UTC only D − as_of_lag was out",
             "/probe/published — when yesterday's Wikipedia, Bitcoin-network and weather values first appeared (measured by the cron, for the AS OF view)",
             "/archive/status — what the archive holds, what is missing, recent errors",
             "/archive/step — do one unit of archive work now for one asset (build one missing year, or refresh the recent days). Optional &id=",
@@ -1927,6 +2013,7 @@ export default {
       if (p === "/scene") return await scene(env, url);
       if (p === "/window-series") return await windowSeries(env, url);
       if (p === "/moments") return await moments(env, url);
+      if (p === "/talk") return await talk(env, url);
       if (p === "/probe/gdelt") return out(await probeGdelt(url.searchParams.get("only")));
       if (p === "/probe/weather") return out(await probeWeather());
       if (p === "/probe/quakes") return out(await probeQuakes());
