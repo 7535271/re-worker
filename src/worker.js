@@ -1,5 +1,5 @@
 /* ──────────────────────────────────────────
-   RE: — worker (v3: 観測の倉庫)
+   frctlns — worker (v3: 観測の倉庫)
    CMC の生データを「その時点で観測できた世界の状態」に畳む。
    欠測は 0 にせず ABSENT として保持する。
 
@@ -10,7 +10,7 @@
      F&G    : D日 00:00 UTC の記録。timestamp を観測時点として採用（暫定）。
               実際にいつ API に出て、どの時点の値と一致するかは
               /probe/fng-timing で測っている（2026-09-25〜）
-   「D日が終わった時点」という定義もあり得る。RE: は
+   「D日が終わった時点」という定義もあり得る。frctlns は
    「その時点から見えていた世界 → その後」を見るので、起点の側を選んだ。
 
    ── 観測の倉庫（Workers KV、2026-09-25）──
@@ -36,7 +36,7 @@ const DEFINITION =
   "quotes: the snapshot at D 00:00 / OHLCV: the candle that closed at the end of D-1 / " +
   "Fear & Greed: the value recorded at D 00:00.";
 const FNG_TIME_NOTE =
-  "For now RE: takes the Fear & Greed timestamp (D 00:00 UTC) as the moment of observation. " +
+  "For now frctlns takes the Fear & Greed timestamp (D 00:00 UTC) as the moment of observation. " +
   "/probe/fng-timing checks this against what the API actually shows over time.";
 
 const AXES = [
@@ -228,7 +228,7 @@ function axesValues(day, src) {
 }
 
 /* ── MarketState ──
-   ある1日の、RE: が観測できた世界の状態（D日 00:00 UTC 時点）。
+   ある1日の、frctlns が観測できた世界の状態（D日 00:00 UTC 時点）。
    全項目が埋まる必要はない。埋まらない軸は absent のまま持つ。 */
 function buildMarketState(day, src) {
   const v = axesValues(day, src);
@@ -931,11 +931,11 @@ function analyzeTiming(log) {
     },
     how_to_read:
       "For each day D, value is what /v3/fear-and-greed/historical lists for D (timestamp D 00:00 UTC). " +
-      "live shows the live index (/v3/fear-and-greed/latest) computed nearest to D-1 00:00, D 00:00 and D+1 00:00, as RE: saw it. " +
+      "live shows the live index (/v3/fear-and-greed/latest) computed nearest to D-1 00:00, D 00:00 and D+1 00:00, as frctlns saw it. " +
       "historical_value_equals_live_at: 'D 00:00' = the listed value is the index as it stood at the start of D; " +
       "'D+1 00:00' = it is the value at the end of D; 'tie' = the index did not move, so this day cannot tell; " +
-      "'none' = matches none of them; 'waiting' = RE: does not have both readings yet. " +
-      "appeared = when the value first showed up in the historical list (RE: looks every 30 minutes).",
+      "'none' = matches none of them; 'waiting' = frctlns does not have both readings yet. " +
+      "appeared = when the value first showed up in the historical list (frctlns looks every 30 minutes).",
     definition_now: FNG_TIME_NOTE,
     days: rows.slice(-30).reverse(),
     revisions: log.revisions.slice(-20),
@@ -1134,7 +1134,7 @@ async function probeGdelt(only) {
     _summary: Object.fromEntries(out.map((o) => [o.name, o.summary])),
     notes: [
       "Query 'bitcoin', mode timelinevolraw (number of matching articles over time).",
-      "before_2017 vs 2017_01 checks where the searchable archive starts; 2020_03 checks a month we already look at in RE:.",
+      "before_2017 vs 2017_01 checks where the searchable archive starts; 2020_03 checks a month we already look at in frctlns.",
       "Calls are spaced 5.5 s apart because GDELT allows one request every 5 seconds per IP (Cloudflare IPs are shared, so a 429 is itself an observation).",
     ],
     calls: out.map((o) => ({ name: o.name, request: o.request, response: o.response })),
@@ -1336,9 +1336,9 @@ const WINDOW_TIME = {
   // 4つの時間は型紙。窓が持っているものだけ書く（2026-09-27、ノヴァ）
   wikipedia_en: { event: "people reading during the UTC day", observation: "counted by Wikimedia as it happens", publication: "about a day after the day ends (being measured: /probe/published)", value_status: "as_published", as_of_lag: 2 },
   wikipedia_ja: { event: "people reading during the UTC day", observation: "counted by Wikimedia as it happens", publication: "about a day after the day ends (being measured: /probe/published)", value_status: "as_published", as_of_lag: 2 },
-  hacker_news: { event: "stories posted during the UTC day", publication: "the moment they are posted", revision: "points and comments keep changing; RE: can only read today's values", value_status: "current", as_of_lag: 1 },
+  hacker_news: { event: "stories posted during the UTC day", publication: "the moment they are posted", revision: "points and comments keep changing; frctlns can only read today's values", value_status: "current", as_of_lag: 1 },
   apod: { publication: "one picture per date, US Eastern time (before 00:00 UTC of the next day)", value_status: "as_published", as_of_lag: 1 },
-  earthquakes: { event: "earthquakes during the UTC day", observation: "detected within minutes", publication: "within about an hour of each event", revision: "magnitudes and locations are revised, sometimes years later; RE: can only read today's values", value_status: "revised", as_of_lag: 1 },
+  earthquakes: { event: "earthquakes during the UTC day", observation: "detected within minutes", publication: "within about an hour of each event", revision: "magnitudes and locations are revised, sometimes years later; frctlns can only read today's values", value_status: "revised", as_of_lag: 1 },
   fx: { event: "the ECB sets one reference rate per business day", publication: "that day, about 16:00 CET", value_status: "as_published", as_of_lag: 1 },
   bitcoin_network: { event: "blocks and transactions during the UTC day", observation: "public on the chain as it happens; the hash rate is estimated from how fast blocks were found", publication: "daily chart values from Blockchain.com; when a day appears is being measured (/probe/published)", value_status: "current", as_of_lag: 2 },
   weather: { event: "the weather during the UTC day at one place", observation: "felt and measured there as it happens", publication: "Open-Meteo Best Match: ECMWF IFS every 6 hours without delay (2017 on), ERA5 about 5 days later (1940 on); being measured: /probe/published", revision: "recent values can change when ERA5 arrives; days before 2017 are a reconstruction made years later", value_status: "revised", as_of_lag: 2 },
@@ -1506,7 +1506,7 @@ async function sceneWeather(day, place) {
 function sceneX(day) {
   const q = `bitcoin since:${day} until:${shiftDay(day, 1)}`;
   return {
-    state: "door", source: "X search (opens in X; RE: fetches nothing from X)",
+    state: "door", source: "X search (opens in X; frctlns fetches nothing from X)",
     url: `https://x.com/search?q=${encodeURIComponent(q)}&src=typed_query&f=top`,
     note: "X's API has no free way to read past posts, so this window is a door, not data.",
   };
@@ -1908,7 +1908,7 @@ function analyzePublication(log) {
     return { day: d, first_checked: r.first_checked, first_checked_minutes_after_day_end: after(r.first_checked), seen };
   });
   return {
-    question: "Was day D − 1 already published at D 00:00 UTC? For each source, the first time RE: saw yesterday's value (checked twice an hour, at :05 and :35). Weather is checked at one point (Tokyo) as a sample.",
+    question: "Was day D − 1 already published at D 00:00 UTC? For each source, the first time frctlns saw yesterday's value (checked twice an hour, at :05 and :35). Weather is checked at one point (Tokyo) as a sample.",
     how_to_read: "minutes_after_day_end = when it was first seen, counted from the end of that day (00:00 UTC of the next day). If it equals first_checked_minutes_after_day_end, it was already there at the first look, so it was published earlier than that.",
     days: rows,
   };
@@ -1975,7 +1975,7 @@ export default {
       // 画面（public/index.html）がある間は "/" は静的ファイルが先に返す。API の一覧は /api でも見られる
       if (p === "/" || p === "/api") {
         return out({
-          name: "RE: — A Temporal Exploration Playground (worker)",
+          name: "frctlns — a temporal exploration playground (worker)",
           definition: DEFINITION,
           endpoints: [
             "/ — the app (public/index.html, public/app.js, public/engine.js)",
