@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>frctlns</title>
-<meta name="description" content="frctlns — a temporal exploration playground. Stand on a moment in time, found from the crypto market or from the world, look through the windows as they were at 00:00, open what happened next, and find where the windows moved together.">
+<meta name="description" content="frctlns — a temporal exploration playground. Stand on a moment in time and find the places in time that overlap with it — at 00:00, afterwards, or in the windows that jumped together — then look at both through the same windows.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cstyle%3Erect%7Bfill:%23f9f9f7%7Dtext%7Bfill:%230d0d0d%7D%40media (prefers-color-scheme:dark)%7Brect%7Bfill:%230d0d0d%7Dtext%7Bfill:%23f9f9f7%7D%7D%3C/style%3E%3Crect width='64' height='64' rx='14'/%3E%3Ctext x='32' y='47' font-family='system-ui,-apple-system,sans-serif' font-size='44' font-weight='800' text-anchor='middle'%3Ef%3C/text%3E%3C/svg%3E">
 <style>
   :root {
@@ -21,8 +21,8 @@
     --ring: rgba(11, 11, 11, 0.10);
     --wash: rgba(11, 11, 11, 0.04);
     --series-d: #2a78d6;      /* D (the day you stand on) */
-    --series-sel: #eb6834;    /* the similar past you are replaying */
-    --context: #c3c2b7;       /* the other similar pasts */
+    --series-sel: #eb6834;    /* the other day of the pair */
+    --context: #c3c2b7;       /* the other places found the same way */
     --meter: #52514e;
     --meter-track: #ecebe6;
     --on-bg: #0b0b0b;
@@ -404,7 +404,7 @@
   .row-link .obs-t { color: var(--ink); font-size: 15px; line-height: 1.3; }
   .row-link .rl-t { color: var(--ink); font-size: 15px; font-weight: 650; line-height: 1.3; text-align: left; }
   .row-link .rl-t small { display: block; margin-top: 3px; font-size: 12px; font-weight: 500; color: var(--muted); }
-  /* the pair is the centre (2026-09-28): its title is both days, and the four ways of alike sit right under it */
+  /* the pair is the centre (2026-09-28): its title is both days */
   .ptitle { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 22px !important; line-height: 1.2; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
   .ptitle i { display: inline-block; width: 10px; height: 10px; border-radius: 999px; margin-right: 6px; vertical-align: middle; }
   .ptitle .ar { color: var(--muted); font-weight: 600; }

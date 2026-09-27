@@ -932,7 +932,7 @@ function noneWhy() {
   if (!res || res.error) out.push(["at 00:00", res && res.error === "no axis can be observed for this window" && !S.off.size ? "too little past before this day" : "nothing could be compared"]);
   else if (!res.results.length) out.push(["at 00:00", res.searched ? "no earlier day had enough of this day's market to compare" : "no earlier day to compare with yet"]);
   const mv = movesNow();
-  if (!mv.results.length) out.push(["afterwards", mv.error ? mv.error : "no other day moved like this"]);
+  if (!mv.results.length) out.push(["afterwards", mv.error ? mv.error : "no other day moved in the same shape"]);
   const pr = patternCache.get(patternKey(S.day));
   if (pr && pr.pattern.length < 2) out.push(["together", pr.pattern.length ? `only ${pr.pattern[0].name} jumped on this day` : "no windows jumped on this day"]);
   else if (pr && !pr.results.length) out.push(["together", `${patternText(pr.pattern)} — this set never jumped together again`]);
@@ -968,7 +968,7 @@ async function renderPlaces() {
   }
 }
 
-/* ══ 3. two days side by side: was it really alike? what happened next? stand there ══ */
+/* ══ 3. two days side by side: what overlapped, what came after both, both through the same windows ══ */
 /* the days you can step between: the places that overlap with the day you stand on */
 function pairList() {
   return placesNow();
@@ -1098,9 +1098,9 @@ function drawNext(r, animate) {
 }
 
 /* ── what was compared: the two ranges of days, drawn as two lines on the same axis ──
-   Looked alike (STATE): the price's place within its own past year, day by day (frctlns compares every part of the market; the price stands for them here).
-   Looked alike (TRAJECTORY): the price path from the window's first day.
-   Moved alike: the shape of the price, each line on its own scale (the other day stretched to the same length) */
+   At 00:00 (STATE): the price's place within its own past year, day by day (frctlns compares every part of the market; the price stands for them here).
+   At 00:00 (TRAJECTORY, kept in the engine): the price path from the window's first day.
+   Afterwards: the shape of the price, each line on its own scale (the other day stretched to the same length) */
 function comparedOf(r) {
   const tl = ex.tl, P = tl.axes.price;
   const q = dayNum(S.day) - tl.d0, c = r.index;
@@ -1302,7 +1302,7 @@ async function renderPair(r) {
       const g = [pairGlimpse(t.k, A, q, comps, loading), pairGlimpse(t.k, B, c, comps, loading)];
       g.forEach((text, j) => { const sp = el("span"); sp.append(el("i", { style: `background:var(${j ? "--series-sel" : "--series-d"})` }), el("em", {}, text)); two.append(sp); });
       const tn = el("span", { class: "tn" }, t.name);
-      if (score !== null && !loading) tn.append(el("span", { class: "ta", title: "how alike the two days look through this window" }, `${Math.round(score * 100)}%`));
+      if (score !== null && !loading) tn.append(el("span", { class: "ta", title: "how much the two days overlap through this window" }, `${Math.round(score * 100)}%`));
       b.append(tn, two);
       b.addEventListener("click", () => go({ open: S.open === t.k ? null : t.k }, false));
       grid.append(b);
@@ -1731,7 +1731,7 @@ function timeDetails(time, flat = false) {
   return d;
 }
 
-/* ── similar, through which window? (Market ranked the pasts; each other window says how alike they look from there) ── */
+/* ── each window's place within its own past year, for measuring how much two days overlap through it ── */
 const wseries = new Map();   // raw /window-series answers
 const wcomps = new Map();    // "coin|window" → { comps, raw, day, lag } (computed once per coin: each coin has its own days)
 const rawKey = (w) => (w === "weather" ? `weather|${S.place}` : w === "attention" ? `attention|${S.coin}` : w);
