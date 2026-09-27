@@ -1,25 +1,12 @@
 /* frctlns — the page. Reads /series once per coin, then every observation is computed here in the browser.
-   Rearranged 2026-09-28 (Shu, Nova): the centre is a pair of days. The start shows pairs already found —
-   the same windows jumped, the same shape afterwards, the same word — and any day can be compared four ways
-   (looked like this, moved like this, moved together, same word) or explored on its own.
-   00:00 stays as the edge of what could be seen from a day; what came after is shown, and marked when it was used to find a pair. */
-import { createExplorer, AXES, STATE_AXES, TRAJ_AXES, WIDTHS, HORIZON, REPLAY_OFFSETS, dayNum, ymdOf, asOfColumn, rangeState, mean7, windowSimilarity } from "./engine.js";
+   Rearranged 2026-09-28 (Shu, Nova): three ways in (a coin, a random day, a word). Standing on a day, frctlns looks for the
+   places in time that overlap with it — at 00:00, afterwards, together, the word — and lists them, most overlap first.
+   A pair shows what overlapped, what came after both days, and both days through the same windows; any day can be explored on its own.
+   00:00 stays as the edge of what could be seen from a day; what came after is shown, and marked when it was used to find a place. */
+import { createExplorer, AXES, HORIZON, REPLAY_OFFSETS, dayNum, ymdOf, asOfColumn, rangeState, mean7 } from "./engine.js";
 
 const $ = (id) => document.getElementById(id);
 const SVG = "http://www.w3.org/2000/svg";
-
-const LABEL = {
-  price: "Price", volume: "Volume", market_cap: "Market cap", volatility: "Volatility",
-  change_24h: "24h change", change_7d: "7d change", change_30d: "30d change",
-  sentiment: "Fear & Greed", attention: "Attention",
-};
-const ABSENT_WHY = {
-  sentiment: "Fear & Greed has no value for this window (the index starts on 2023-06-29, and new days reach CMC's history with a delay).",
-};
-const MODE_HINT = {
-  STATE: "Where each part of the market stood within its own past year, as seen on each day of the window (STATE).",
-  TRAJECTORY: "How price, volume, volatility and Fear & Greed moved inside the window, from its first day (TRAJECTORY).",
-};
 
 /* the markets frctlns keeps (CMC ids). Attention follows the coin's own English Wikipedia article */
 const COINS = [
@@ -37,7 +24,7 @@ const WORDS = [["eclipse", "eclipse"], ["iphone", "iPhone"], ["ai", "AI"], ["spa
 const VIEWS = ["home", "stand", "past", "how"];
 const S = {
   coin: "1", t: "market", q: "", day: null, mode: "STATE", width: 7, off: new Set(),
-  other: null, pk: "m", place: "tokyo", view: "home", open: null, mv: 7, mtv: "dots", x: false,
+  other: null, place: "tokyo", view: "home", open: null, mv: 7, mtv: "dots", x: false,
 };
 const SPANS = [[3, "3 days"], [7, "1 week"], [30, "1 month"]];
 /* the weather window looks at one place, chosen by the viewer */
@@ -97,10 +84,6 @@ function textWithDates(tag, attrs, text) {
   if (last < text.length) e.append(document.createTextNode(text.slice(last)));
   return e;
 }
-function setDated(node, text) {
-  node.textContent = "";
-  node.append(...textWithDates("span", {}, text).childNodes);
-}
 function svg(tag, attrs = {}, text) {
   const e = document.createElementNS(SVG, tag);
   for (const [k, v] of Object.entries(attrs)) if (v !== undefined && v !== null) e.setAttribute(k, String(v));
@@ -112,18 +95,15 @@ function svg(tag, attrs = {}, text) {
 function readHash() {
   const h = new URLSearchParams(location.hash.slice(1));
   S.coin = COINS.some((c) => c.id === h.get("c")) ? h.get("c") : "1";
-  S.t = h.get("t") === "world" ? "world" : "market";
   S.q = normWord(h.get("q") || "");
   const d = h.get("d");
   S.day = d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
-  S.mode = h.get("m") === "TRAJECTORY" ? "TRAJECTORY" : "STATE";
-  const w = Number(h.get("w"));
-  S.width = WIDTHS.includes(w) ? w : 7;
+  // at 00:00 has one fixed condition: the whole market over the week up to the day (2026-09-28, Shu and Nova: no hidden settings)
+  S.mode = "STATE";
+  S.width = 7;
   S.off = new Set();
-  for (const k of (h.get("off") || "").split(",")) if (AXES.includes(k)) S.off.add(k);
   const p = h.get("p");
   S.other = p && /^\d{4}-\d{2}-\d{2}$/.test(p) ? p : null;
-  S.pk = ["w", "v", "p"].includes(h.get("pk")) ? h.get("pk") : "m";
   const mv = Number(h.get("mv"));
   S.mv = SPANS.some(([x]) => x === mv) ? mv : 7;
   S.mtv = h.get("mtv") === "lines" ? "lines" : "dots";
@@ -142,12 +122,8 @@ function writeHash(push = false) {
     return;
   }
   if (S.coin !== "1") parts.push(`c=${S.coin}`);
-  if (S.t !== "market") parts.push(`t=${S.t}`);
   if (S.q) parts.push(`q=${encodeURIComponent(S.q)}`);
   if (S.day) parts.push(`d=${S.day}`);
-  if (S.mode !== "STATE") parts.push(`m=${S.mode}`);
-  if (S.width !== 7) parts.push(`w=${S.width}`);
-  if (S.off.size) parts.push(`off=${[...S.off].join(",")}`);
   if (S.other && S.view === "past") parts.push(`p=${S.other}`);
   if (S.mv !== 7) parts.push(`mv=${S.mv}`);
   if (S.mtv !== "dots") parts.push(`mtv=${S.mtv}`);
@@ -221,13 +197,6 @@ async function boot() {
 }
 
 function setupControls() {
-  const wbox = $("width");
-  for (const w of WIDTHS) {
-    const b = el("button", { type: "button", "data-w": w, "aria-label": `${w}-day window` }, `${w}d`);
-    b.addEventListener("click", () => { S.width = w; run(); });
-    wbox.append(b);
-  }
-  for (const b of $("mode").querySelectorAll("button")) b.addEventListener("click", () => { S.mode = b.dataset.mode; run(); });
   // the world: a word
   $("ask").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -326,7 +295,7 @@ async function setCoin(id) {
   writeHash(false);
 }
 
-/* ── one observation (the market side: days that looked like the day you stand on) ── */
+/* ── one observation: the market at 00:00 (at 00:00 — the days whose market stood alike over the week up to them) ── */
 function search() {
   if (S.mode === "TRAJECTORY" && S.width < 2) S.width = 7;
   const axes = {};
@@ -478,7 +447,6 @@ function bigMoves() {
   return got;
 }
 /* ══ 2. the day you stand on ══ */
-const ownKey = () => `${S.coin}|${S.day}`;
 function contextLine() {
   const box = $("s-ctx");
   box.textContent = "";
@@ -533,7 +501,7 @@ function renderStand() {
     drawOwn(false);
   }
 }
-/* moved like this afterwards: the shape of the move after the day (hindsight) */
+/* afterwards: the shape of the move after the day (hindsight) */
 const movesCacheDay = new Map();
 function movesOf(day, mv) {
   const key = `${S.coin}|${day}|${mv}`;
@@ -1001,7 +969,7 @@ async function renderPlaces() {
 }
 
 /* ══ 3. two days side by side: was it really alike? what happened next? stand there ══ */
-/* the days you can step between: the market's look-alikes, or the other moments of the word */
+/* the days you can step between: the places that overlap with the day you stand on */
 function pairList() {
   return placesNow();
 }
@@ -1203,25 +1171,21 @@ async function renderLens(r) {
   const axes = {};
   for (const k of AXES) axes[k] = !S.off.has(k);
   const pa = ex.pairAlike(S.day, r.day, { mode: S.mode, width: S.width, axes, span: S.mv });
-  const rows = [];
-  const L = pa.looked;
-  rows.push({ pk: "m", name: "At 00:00", v: L.error ? "—" : `${Math.round(L.similarity * 100)}%`, off: !!L.error,
-    d: L.error ? L.error : `${L.mode === "TRAJECTORY" ? "how the market moved" : "where the market stood"} over the ${L.width === 1 ? "day itself" : `${L.width} days up to each day`}, each at its own 00:00` });
-  const M = pa.moved;
-  rows.push({ pk: "v", name: "Afterwards", v: M.error ? "—" : M.similarity > 0 ? `${Math.round(M.similarity * 100)}%` : "opposite", off: !!M.error || M.similarity <= 0,
-    d: M.error ? M.error : `the shape of the price from ${M.lead} day${M.lead === 1 ? "" : "s"} before to ${SPAN_NAME[M.span] === "3 days" ? "3 days" : `a ${SPAN_NAME[M.span]}`} after${M.stretch !== 1 && M.similarity > 0 ? ` (that day's move took ${M.stretch < 1 ? "half" : "twice"} as long)` : ""} · ${pct(M.queryMove)} here, ${pct(M.move)} there · hindsight` });
+  const L = pa.looked, M = pa.moved;
+  // results only; how each was measured lives under Why this pair? (Nova, 2026-09-28)
+  const rows = [
+    { pk: "m", name: "At 00:00", v: L.error ? "—" : `${Math.round(L.similarity * 100)}%`, off: !!L.error },
+    { pk: "v", name: "Afterwards", v: M.error ? "—" : M.similarity > 0 ? `${Math.round(M.similarity * 100)}%` : "opposite", off: !!M.error || M.similarity <= 0 },
+  ];
   const draw = (tg) => {
     const all = [...rows];
-    if (tg === null) all.push({ pk: "p", name: "Together", v: "…", off: true, d: "looking at every window…" });
-    else if (tg.error) all.push({ pk: "p", name: "Together", v: "—", off: true, d: `could not be looked at this time (${tg.error})` });
-    else all.push({ pk: "p", name: "Together", v: tg.a.length ? `${tg.both.length} of ${tg.a.length}` : "—", off: !tg.both.length,
-      d: !tg.a.length ? "no window jumped on your day (on the day or the day after)"
-        : tg.both.length ? `jumped on both days: ${tg.both.join(", ")} · hindsight` : `none of your day's ${tg.a.length} windows jumped on that day · hindsight` });
+    if (tg === null) all.push({ pk: "p", name: "Together", v: "…", off: true });
+    else if (tg.error) all.push({ pk: "p", name: "Together", v: "—", off: true });
+    else all.push({ pk: "p", name: "Together", v: tg.a.length ? `${tg.both.length} of ${tg.a.length}` : "—", off: !tg.both.length });
     if (S.q) {
       const ms = momentsNow();
       const inQ = ms.some((m) => m.day === S.day), inC = ms.some((m) => m.day === r.day);
-      all.push({ pk: "w", name: "The word", v: inQ && inC ? "both" : inQ || inC ? "one" : "—", off: !(inQ && inC),
-        d: inQ && inC ? `each is a moment of “${S.q}”` : inQ || inC ? `only ${inQ ? "your day" : "that day"} is a moment of “${S.q}”` : `neither is a moment of “${S.q}”` });
+      all.push({ pk: "w", name: "The word", v: inQ && inC ? "both" : inQ || inC ? "one" : "—", off: !(inQ && inC) });
     }
     box.textContent = "";
     box.append(el("h3", {}, "What overlapped?"));
@@ -1649,64 +1613,10 @@ function openWindow(k, ctx, get, comps, q) {
   return null;
 }
 
-function coverageNote(r) {
-  if (!r || !r.coverage_days) return null;
-  const parts = [];
-  if (r.coverage_days.candidate !== null && r.coverage_days.candidate < 365) parts.push(`this past day: ${r.coverage_days.candidate} days`);
-  if (r.coverage_days.query !== null && r.coverage_days.query < 365) parts.push(`D: ${r.coverage_days.query} days`);
-  return parts.length ? `scaled on less than a full year (${parts.join(", ")})` : null;
-}
 
 /* ══ 4. the Observatory: how it works, and the knobs ══ */
 function renderHow() {
   $("how-coin").textContent = `${coinNow().name} · standing on ${S.day}`;
-  for (const b of $("width").querySelectorAll("button")) {
-    const w = Number(b.dataset.w);
-    b.setAttribute("aria-pressed", String(w === S.width));
-    b.disabled = S.mode === "TRAJECTORY" && w < 2;
-  }
-  for (const b of $("mode").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.mode === S.mode));
-  $("mode-hint").textContent = MODE_HINT[S.mode];
-  const box = $("chips");
-  box.textContent = "";
-  // "attention" is a place kept in the market engine; the Attention window lives with the other windows
-  const list = (S.mode === "TRAJECTORY" ? TRAJ_AXES : STATE_AXES).filter((k) => k !== "attention");
-  for (const k of list) {
-    const absent = res.presence[k] === "absent";
-    const state = absent ? "absent" : S.off.has(k) ? "off" : "on";
-    const b = el("button", { type: "button", class: "chip", "data-state": state, "aria-pressed": absent ? undefined : String(state === "on"), "aria-disabled": absent ? "true" : undefined, title: absent ? (ABSENT_WHY[k] || `${LABEL[k]} has no data for this window.`) : `Tap to turn ${state === "on" ? "off" : "on"}` });
-    b.append(el("span", { class: "mark", "aria-hidden": "true" }, state === "on" ? "●" : state === "off" ? "○" : "–"), document.createTextNode(LABEL[k]));
-    if (!absent) b.addEventListener("click", () => { S.off.has(k) ? S.off.delete(k) : S.off.add(k); run(); });
-    box.append(b);
-  }
-  const why = $("absent-why");
-  why.textContent = "";
-  for (const k of list) {
-    if (res.presence[k] !== "absent") continue;
-    let reason;
-    if (k === "sentiment") {
-      const from = meta.fng_from || "2023-06-29";
-      const lastF = (meta.last_on || {}).sentiment;
-      if (S.day < from) reason = `the index starts on ${from}`;
-      else if (lastF && S.day > lastF) reason = `the value for ${S.day} is not in CMC's history yet (new days arrive there with a delay)`;
-      else reason = "not enough values in this window";
-    } else reason = "less than 30 days of past to scale it, or no values in this window";
-    why.append(el("div", {}, `– ${LABEL[k]}: ${reason}`));
-  }
-
-  const det = $("status-detail");
-  det.textContent = "";
-  if (res.error) det.append(el("div", {}, res.error));
-  else if (!res.searched) det.append(textWithDates("div", {}, `No past window ended by ${res.strict.last_candidate_end} (D − ${HORIZON} days). The archive starts on ${ex.first}; a past only counts if its ${HORIZON}-day replay had already happened on D.`));
-  else det.append(textWithDates("div", {}, `D = ${S.day}. Searched ${int(res.searched)} past windows that ended by ${res.strict.last_candidate_end} (D − ${HORIZON} days), so each replay had already happened on D.`));
-  if (res.excluded) det.append(textWithDates("div", {}, `${int(res.candidates)} compared · ${int(res.excluded)} left out: less than half of D's axes (by weight) could be compared there.`));
-  if (res.later_filled) det.append(textWithDates("div", {}, `Fewer than five days before D could be found, so ${res.later_filled} later day${res.later_filled === 1 ? " was" : "s were"} added (marked "later in history"). Their replays start after D's own next ${HORIZON} days, so D's future stays hidden.`));
-  if (meta.complete === false && meta.missing_years && meta.missing_years.length) det.append(textWithDates("div", { class: "note" }, `The archive is still filling (missing: ${meta.missing_years.join(", ")}). Results use what is stored so far.`));
-  const i = Math.max(0, res.results.findIndex((x) => x.day === S.other));
-  const r = res.results[i] || null;
-  renderTable(ex.replay(S.day, S.day), r ? ex.replay(r.day, limitFor(r)) : null, r, i);
-  renderWhy(r);
-  renderCompare();
   const times = $("times");
   times.textContent = "";
   loadScene(ymdOf(dayNum(S.day) - 1)).then((sc) => { if (S.view === "how") { times.textContent = ""; times.append(timeDetails(sc.window_time || {}, true)); } }).catch(() => {});
@@ -1822,11 +1732,6 @@ function timeDetails(time, flat = false) {
 }
 
 /* ── similar, through which window? (Market ranked the pasts; each other window says how alike they look from there) ── */
-const CMP_WINDOWS = [
-  { k: "network", name: "BTC network" },
-  { k: "attention", name: "Attention" },
-  { k: "weather", name: "Weather" },
-];
 const wseries = new Map();   // raw /window-series answers
 const wcomps = new Map();    // "coin|window" → { comps, raw, day, lag } (computed once per coin: each coin has its own days)
 const rawKey = (w) => (w === "weather" ? `weather|${S.place}` : w === "attention" ? `attention|${S.coin}` : w);
@@ -1868,7 +1773,6 @@ async function windowComps(k) {
   wcomps.set(key, out);
   return out;
 }
-const SKY = (c) => (Number.isNaN(c) ? "" : c === 0 ? "clear" : c <= 3 ? "cloudy" : c <= 48 ? "fog" : c <= 57 ? "drizzle" : c <= 67 ? "rain" : c <= 77 ? "snow" : c <= 82 ? "showers" : c <= 86 ? "snow" : "storm");
 function compact(v) {
   if (Number.isNaN(v)) return "–";
   if (v >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
@@ -1882,89 +1786,6 @@ function usdShort(v) {
   if (v >= 1e3) return `$${(v / 1e3).toFixed(1)}k`;
   if (v >= 10) return `$${Math.round(v)}`;
   return usd(v);
-}
-function cmpCell(big, small, meter) {
-  const c = el("span", { class: "c" });
-  c.append(el("b", {}, big));
-  if (meter !== undefined && meter !== null) { const m = el("span", { class: "meter", "aria-hidden": "true" }); m.append(el("i", { style: `width:${Math.max(0, Math.min(1, meter)) * 100}%` })); c.append(m); }
-  if (small) c.append(el("small", {}, small));
-  return c;
-}
-let cmpToken = 0;
-async function renderCompare() {
-  if (!res || !ex) return;
-  if (res.error || !res.results.length) { $("compare-grid").textContent = ""; $("compare-notes").textContent = ""; return; }
-  const token = ++cmpToken;
-  // what is already known draws at once; windows still loading show "…" and fill in
-  const got0 = {}, why = {};
-  const pending = [];
-  for (const w of CMP_WINDOWS) {
-    const key = `${S.coin}|${rawKey(w.k === "network" ? "tx" : w.k)}`;
-    if (wcomps.has(key)) got0[w.k] = wcomps.get(key);
-    else pending.push(w.k);
-  }
-  drawCompare(got0, why, pending);
-  if (!pending.length) return;
-  const got = await Promise.allSettled(pending.map((k) => windowComps(k)));
-  if (token !== cmpToken) return;
-  got.forEach((g, i) => { if (g.status === "fulfilled") got0[pending[i]] = g.value; else why[pending[i]] = `could not be read this time (${g.reason && g.reason.message ? g.reason.message : "no answer"})`; });
-  drawCompare(got0, why, []);
-}
-function drawCompare(readyW, why, loading) {
-  const tl = ex.tl, q = dayNum(S.day) - tl.d0, w = res.width;
-  const grid = $("compare-grid");
-  grid.textContent = "";
-  const head = el("div", { class: "cmp-row head", role: "row" });
-  head.append(el("span", { role: "columnheader" }, ""), el("span", { role: "columnheader" }, "Market"));
-  for (const x of CMP_WINDOWS) head.append(el("span", { role: "columnheader" }, x.name));
-  grid.append(head);
-
-  // D: the values each window had at D 00:00
-  const dRow = el("div", { class: "cmp-row d", role: "row" });
-  const who = el("span", { class: "who" });
-  who.append(el("i", { class: "k", style: "background:var(--series-d)" }), el("b", {}, "D"), el("small", {}, S.day));
-  dRow.append(who, cmpCell(usdShort(tl.axes.price[q]), "price"));
-  for (const x of CMP_WINDOWS) {
-    const W = readyW[x.k];
-    if (!W) { dRow.append(cmpCell(loading.includes(x.k) ? "…" : "–", "")); continue; }
-    if (x.k === "attention") dRow.append(cmpCell(compact(W.raw.views[q]), "views"));
-    else if (x.k === "network") dRow.append(cmpCell(compact(W.raw.tx[q]), "tx"));
-    else dRow.append(cmpCell(Number.isNaN(W.raw.tmax[q]) ? "–" : `${Math.round(W.raw.tmax[q])}°`, SKY(W.raw.code[q])));
-  }
-  grid.append(dRow);
-
-  // each similar past: how alike it looks to D, window by window
-  res.results.forEach((r, i) => {
-    const b = el("button", { type: "button", class: "cmp-row", role: "row", "aria-pressed": String(r.day === S.other), "aria-label": `Similar past ${i + 1}, ${r.day}` });
-    const wk = el("span", { class: "who" });
-    wk.append(el("i", { class: "k", style: `background:var(${r.day === S.other ? "--series-sel" : "--context"})` }), el("b", {}, `${r.later ? "Later" : "Past"} ${i + 1}`), el("small", {}, r.day));
-    b.append(wk, cmpCell(r.similarity.toFixed(2), null, r.similarity));
-    for (const x of CMP_WINDOWS) {
-      const W = readyW[x.k];
-      if (!W) { b.append(cmpCell(loading.includes(x.k) ? "…" : "–", null)); continue; }
-      const s = windowSimilarity(W.comps, q, r.index, w);
-      b.append(s ? cmpCell(s.similarity.toFixed(2), null, s.similarity) : cmpCell("–", null));
-    }
-    b.addEventListener("click", () => go({ view: "past", pk: "m", other: r.day, open: null }));
-    grid.append(b);
-  });
-
-  // notes: what each column means, and why a cell is empty
-  const notes = $("compare-notes");
-  notes.textContent = "";
-  const lag = (readyW.attention || readyW.network || readyW.weather || {}).lag ?? 2;
-  notes.append(el("div", {}, `The market found these days (${res.mode === "STATE" ? "where it stood" : "how it moved"}, ${w}-day window). The other windows did not: each one only says how alike the same ${w} days look from there — where each stood within its own past year (STATE). 1 = the same, 0 = nothing alike.`));
-  notes.append(el("div", {}, `Each window uses only what had come out by 00:00 UTC of that day, so Attention, Weather and the Bitcoin network are read ${lag} days back.`));
-  notes.append(el("div", {}, `Attention = daily views of English Wikipedia's “${coinNow().wiki}” article · Weather = ${placeNow().name} (change the place in a day's Weather window) · BTC network = Bitcoin's transactions and hash rate (7-day average), the same for every coin.`));
-  for (const x of CMP_WINDOWS) {
-    if (why[x.k]) { notes.append(el("div", {}, `– ${x.name}: ${why[x.k]}`)); continue; }
-    const W = readyW[x.k];
-    if (W && W.comps.every((a) => Number.isNaN(a[q]))) {
-      const reason = x.k === "attention" ? "Wikipedia's daily counts start on 2015-07-01, and a value needs 30 days of past before it has a place in its year"
-        : "no value for D yet (a window needs 30 days of past, and the newest days are not out yet)";
-      notes.append(textWithDates("div", {}, `– ${x.name}: ${reason}.`));
-    }
-  }
 }
 
 /* ── the replay charts (one on the day you stand on, one for two days side by side) ── */
@@ -2115,51 +1936,6 @@ function hideTip(v) {
   tipHint(v);
 }
 
-function renderTable(D, selRep, r, i) {
-  const t = $("table");
-  t.textContent = "";
-  const thead = el("thead"), tr = el("tr");
-  tr.append(el("th", { scope: "col" }, "Day"));
-  const hD = el("th", { scope: "col" });
-  hD.append(el("span", { class: "k", style: "background:var(--series-d)" }), document.createTextNode(`D · ${S.day}`));
-  tr.append(hD);
-  if (r) {
-    const hS = el("th", { scope: "col" });
-    hS.append(el("span", { class: "k", style: "background:var(--series-sel)" }), document.createTextNode(`${i + 1}. ${r.day}`));
-    tr.append(hS);
-  }
-  thead.append(tr);
-  const tbody = el("tbody");
-  REPLAY_OFFSETS.forEach((o, j) => {
-    const row = el("tr", { class: o === 0 ? "event" : undefined });
-    row.append(el("th", { scope: "row", style: "text-align:left;font-weight:inherit" }, o === 0 ? "that day" : `${o > 0 ? "+" : MINUS}${Math.abs(o)}d`));
-    const cell = (p) => {
-      if (p.state === "unknown") return el("td", { class: "unknown", title: "Not yet known on D" }, "?");
-      if (p.state !== "seen") return el("td", { class: "unknown" }, "—");
-      return el("td", {}, o === 0 ? usd(p.price) : pct(p.change));
-    };
-    row.append(cell(D.points[j]));
-    if (selRep) row.append(cell(selRep.points[j]));
-    tbody.append(row);
-  });
-  t.append(thead, tbody);
-}
-function renderWhy(r) {
-  const box = $("why");
-  box.textContent = "";
-  $("why-wrap").style.display = r ? "" : "none";
-  if (!r) return;
-  const entries = Object.entries(r.axes).sort((a, b) => b[1] - a[1]);
-  for (const [k, v] of entries) {
-    const m = el("span", { class: "meter", "aria-hidden": "true" });
-    m.append(el("i", { style: `width:${Math.max(0, Math.min(1, v)) * 100}%` }));
-    box.append(el("span", { class: "n" }, LABEL[k]), m, el("span", { class: "v" }, v.toFixed(2)));
-  }
-  const cov = coverageNote(r);
-  if (cov) box.append(el("span", { class: "note", style: "grid-column:1 / 4" }, cov + " — shown next to the score, not mixed into it."));
-  const offNow = (S.mode === "TRAJECTORY" ? TRAJ_AXES : STATE_AXES).filter((k) => k !== "attention" && !(k in r.axes));
-  if (offNow.length) box.append(el("span", { class: "note", style: "grid-column:1 / 4" }, `Not compared: ${offNow.map((k) => LABEL[k]).join(", ")}.`));
-}
 
 function renderFooter() {
   for (const id of ["footer", "footer-how"]) {

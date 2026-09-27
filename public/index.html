@@ -90,9 +90,9 @@
     padding: calc(12px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   }
   header { padding: 8px 2px 14px; }
-  .brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-  .brand h1 { margin: 0; font-size: 28px; line-height: 1; font-weight: 750; letter-spacing: -0.02em; }
-  .brand .sub { color: var(--ink-2); font-size: 13px; }
+  
+  
+  
   .lede { margin: 8px 0 0; color: var(--ink-2); font-size: 14px; }
 
   .card {
@@ -127,17 +127,7 @@
     box-shadow: inset 0 0 0 1px var(--ring);
   }
   button { font: inherit; color: inherit; }
-  .btn {
-    height: 44px;
-    padding: 0 14px;
-    border: 0;
-    border-radius: 10px;
-    background: var(--plane);
-    box-shadow: inset 0 0 0 1px var(--ring);
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-  }
+  
   .seg {
     display: grid;
     grid-auto-flow: column;
@@ -161,53 +151,29 @@
   .seg button:disabled { color: var(--muted); opacity: 0.45; cursor: default; }
   .hint { margin: 8px 2px 0; font-size: 13px; color: var(--ink-2); }
 
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip {
-    min-height: 36px;
-    padding: 0 12px;
-    border: 0;
-    border-radius: 999px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .chip[data-state="on"] { background: var(--on-bg); color: var(--on-ink); }
-  .chip[data-state="off"] { background: transparent; color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--axis); }
-  .chip[data-state="absent"] { background: var(--wash); color: var(--muted); cursor: default; }
-  .chip .mark { font-size: 11px; opacity: 0.85; }
-  .chip-key { margin: 8px 2px 0; font-size: 12px; color: var(--muted); }
+  
+  
+  
+  
+  
+  
+  
 
   .status { font-size: 13px; color: var(--ink-2); margin: 2px 2px 12px; }
   .status strong { color: var(--ink); font-weight: 600; }
-  .note { font-size: 12px; color: var(--muted); }
+  
   .error { color: var(--ink); background: var(--wash); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
 
-  .results { display: flex; flex-direction: column; gap: 6px; }
-  .result {
-    display: grid;
-    grid-template-columns: 22px 1fr auto;
-    gap: 2px 10px;
-    align-items: center;
-    width: 100%;
-    text-align: left;
-    padding: 10px 12px;
-    border: 0;
-    border-radius: 12px;
-    background: var(--plane);
-    box-shadow: inset 0 0 0 1px var(--ring);
-    cursor: pointer;
-  }
-  .result[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--series-sel); }
-  .result .key { width: 18px; height: 3px; border-radius: 2px; background: var(--context); grid-row: 1 / span 2; }
-  .result[aria-pressed="true"] .key { background: var(--series-sel); }
-  .result .when { font-weight: 600; font-variant-numeric: tabular-nums; }
-  .result .sim { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
-  .result .meta { grid-column: 2 / 4; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
-  .meter { flex: 1; height: 4px; border-radius: 2px; background: var(--meter-track); overflow: hidden; max-width: 140px; }
-  .meter > i { display: block; height: 100%; border-radius: 2px; background: var(--meter); }
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
 
   .chart-wrap { position: relative; margin: 4px -4px 0; }
   .chart-wrap svg { display: block; width: 100%; height: auto; touch-action: pan-y; outline: none; }
@@ -236,17 +202,17 @@
   th:first-child, td:first-child { text-align: left; color: var(--ink-2); }
   thead th { font-size: 12px; font-weight: 600; color: var(--ink-2); vertical-align: bottom; }
   thead th .k { display: inline-block; width: 14px; height: 2px; border-radius: 1px; vertical-align: middle; margin-right: 4px; }
-  tr.event td { font-weight: 700; color: var(--ink); }
+  
   td.unknown { color: var(--muted); }
-  .why { display: grid; grid-template-columns: auto 1fr 44px; gap: 8px 10px; align-items: center; font-size: 13px; margin-top: 6px; }
-  .why .meter { max-width: none; }
-  .why .v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
-  .why .n { color: var(--ink-2); }
+  
+  
+  
+  
   details { margin-top: 12px; }
   summary { cursor: pointer; font-size: 13px; color: var(--ink-2); min-height: 32px; display: flex; align-items: center; }
   details p { font-size: 13px; color: var(--ink-2); margin: 6px 0; }
-  .world-day { margin: 0 0 4px; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .world-day .k { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+  
+  
   .world { display: flex; flex-direction: column; gap: 14px; }
   .win h3 { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 0 0 4px; font-size: 13px; font-weight: 650; }
   .win h3 .when { font-size: 11px; font-weight: 400; color: var(--muted); white-space: nowrap; }
@@ -266,61 +232,61 @@
   .times dl { display: grid; grid-template-columns: 96px 1fr; gap: 3px 10px; margin: 0; font-size: 12px; }
   .times dt { color: var(--muted); }
   .times dd { margin: 0; color: var(--ink-2); overflow-wrap: anywhere; }
-  .cmp { display: flex; flex-direction: column; gap: 5px; }
-  .cmp-row { display: grid; grid-template-columns: 74px repeat(4, minmax(0, 1fr)); gap: 6px; align-items: center; width: 100%; padding: 8px 8px; border: 0; border-radius: 10px; background: transparent; text-align: left; font: inherit; color: inherit; }
-  .cmp-row.head { padding-top: 0; padding-bottom: 0; font-size: 11px; color: var(--muted); }
-  .cmp-row.d { background: var(--wash); }
-  button.cmp-row { cursor: pointer; background: var(--plane); box-shadow: inset 0 0 0 1px var(--ring); }
-  button.cmp-row[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--series-sel); }
-  .cmp .who { display: grid; grid-template-columns: 3px 1fr; column-gap: 6px; align-items: center; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; }
-  .cmp .who .k { grid-row: 1 / span 2; width: 3px; height: 26px; border-radius: 2px; }
-  .cmp .who b { font-size: 12px; font-weight: 700; }
-  .cmp .who small { font-size: 10.5px; color: var(--ink-2); }
-  .cmp .c { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-variant-numeric: tabular-nums; }
-  .cmp .c b { font-size: 13px; font-weight: 650; white-space: nowrap; overflow: hidden; }
-  .cmp .c small { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cmp .c .meter { flex: none; width: 100%; max-width: 46px; height: 3px; }
-  .cmp-notes { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   /* ── the light surface (2026-09-27): one thing to do first, the rest in the drawer ── */
   .hero { padding: 18px 2px 16px; }
   .hero h1 { margin: 0; font-size: 34px; line-height: 1; font-weight: 750; letter-spacing: -0.03em; }
   .hero .lede { margin: 10px 0 14px; font-size: 16px; line-height: 1.4; color: var(--ink-2); }
-  .pick { display: grid; grid-template-columns: 1.15fr 1fr 0.85fr; gap: 8px; }
-  .pick .sel { position: relative; display: block; }
-  .pick .sel::after { content: "▾"; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--muted); pointer-events: none; }
-  .pick select { -webkit-appearance: none; appearance: none; width: 100%; height: 52px; padding: 0 28px 0 14px; font: inherit; font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--ink); background: var(--surface); border: 0; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--ring); cursor: pointer; }
-  .pick select:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--series-d); }
+  
+  
+  
+  
+  
   .try { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; font-size: 12px; color: var(--muted); }
   .try button { min-height: 34px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--wash); color: var(--ink-2); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
   .try button[aria-pressed="true"] { background: var(--on-bg); color: var(--on-ink); }
   h2 { margin: 0 0 12px; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
   .quiet { margin: 10px 2px 0; font-size: 12.5px; color: var(--muted); }
-  .result .short { grid-column: 2 / 4; font-size: 11.5px; color: var(--muted); margin-top: 1px; }
-  .readout { margin: -4px 0 12px; font-size: 15px; color: var(--ink); }
-  .readout .up, .readout .down { font-weight: 700; font-variant-numeric: tabular-nums; }
+  
+  
+  
   .seg.mini { margin-bottom: 10px; }
   .seg.mini button { height: 32px; font-size: 13px; }
-  .result .bars { grid-column: 2 / 4; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 6px; }
-  .result .bar { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-  .result .bar small { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .result .bar .meter { flex: none; max-width: none; width: 100%; height: 4px; }
-  .result .bar[data-state="none"] .meter > i { width: 0 !important; }
-  .result .bar[data-state="none"] small::after { content: " –"; }
-  .result .bar[data-state="wait"] .meter { opacity: 0.4; }
-  .result { transition: box-shadow 0.15s, transform 0.1s; }
-  .result:active, .try button:active, .views button:active { transform: scale(0.98); }
+  
+  
+  
+  
+  
+  
+  
+  
+   .try button:active, .views button:active { transform: scale(0.98); }
   .views { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--grid); }
   .views button { min-height: 34px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--wash); color: var(--ink-2); font-size: 13px; font-weight: 600; cursor: pointer; }
   .views button[aria-pressed="true"] { background: var(--on-bg); color: var(--on-ink); }
   .views button:disabled { opacity: 0.4; cursor: default; }
-  details.drawer > summary { min-height: 44px; font-size: 15px; font-weight: 600; color: var(--ink); }
-  details.drawer[open] > summary { margin-bottom: 4px; }
-  details.drawer h3 { margin: 22px 0 10px; font-size: 15px; font-weight: 700; }
-  details.drawer .detail { font-size: 13px; color: var(--ink-2); display: flex; flex-direction: column; gap: 4px; }
-  details.drawer .explain p { font-size: 13px; color: var(--ink-2); margin: 6px 0; }
+  
+  
+  
+  
+  
   @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-  .results > *, #world-body > * { animation: rise 0.22s ease-out both; }
-  @media (prefers-reduced-motion: reduce) { .results > *, #world-body > * { animation: none; } .result, .try button, .views button { transition: none; } }
+  
+  @media (prefers-reduced-motion: reduce) {   .try button, .views button { transition: none; } }
   /* ── one day at a time (2026-09-27, with Nova): a stage, doors, and the windows of a day ── */
   .screen { animation: slide 0.24s ease-out both; }
   .screen[hidden] { display: none; }
@@ -344,7 +310,7 @@
   .step button { min-width: 48px; height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--wash); color: var(--ink); font-size: 15px; font-weight: 650; cursor: pointer; }
   .step button:disabled { opacity: 0.35; cursor: default; }
   .step button:active { transform: scale(0.96); }
-  .hidden-line { margin: 14px 0 0; font-size: 13px; color: var(--muted); }
+  
   .stage .try { justify-content: center; margin-top: 12px; }
   .list { margin-top: 22px; }
   .list-head { display: flex; flex-direction: column; gap: 2px; margin: 0 2px 10px; }
@@ -356,18 +322,18 @@
   .rows > .row:active { background: var(--wash); }
   .row .when { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .row .when small { font-size: 13px; font-weight: 600; color: var(--muted); margin-right: 6px; }
-  .row .sim { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  
   .row .chev { color: var(--axis); font-size: 20px; line-height: 1; }
   .row .hist { grid-column: 1 / 3; }
   .rows .empty { padding: 16px; font-size: 13px; color: var(--muted); }
-  .rows .divider { padding: 10px 16px 8px; border-top: 1px solid var(--grid); background: var(--wash); font-size: 12px; font-weight: 600; color: var(--ink-2); }
+  
   .hist { font-size: 12px; color: var(--muted); }
   .row-link { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: 12px; padding: 15px 16px; border: 0; border-radius: 16px; background: var(--surface); box-shadow: 0 0 0 1px var(--ring); font: inherit; font-size: 15px; font-weight: 650; color: var(--ink); cursor: pointer; }
   .row-link span { color: var(--axis); font-size: 20px; line-height: 1; }
   .row-link:active { background: var(--wash); }
-  .quiet-link { background: transparent; box-shadow: none; color: var(--ink-2); font-weight: 600; padding: 12px 4px; }
+  
   #footer, #footer-how { margin-top: 14px; }
-  .bar { display: flex; align-items: center; gap: 10px; padding: 2px 0 0; min-height: 40px; }
+  
   .topline .mark:active { transform: scale(0.95); }
   .back { flex: none; border: 0; background: none; padding: 8px 4px 8px 0; font: inherit; font-size: 16px; font-weight: 600; color: var(--series-d); cursor: pointer; }
   .day-head { padding: 14px 2px 4px; }
@@ -403,18 +369,18 @@
   .opened > .win { background: var(--surface); border-radius: 16px; box-shadow: 0 0 0 1px var(--ring); padding: 14px; animation: rise 0.22s ease-out both; }
   .opened .alike { display: flex; align-items: center; gap: 10px; margin: 2px 0 8px; font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
   .opened .alike { flex-wrap: wrap; }
-  .opened .alike .meter { flex: 0 0 72px; max-width: 72px; }
+  
   .opened h4 { margin: 12px 0 4px; font-size: 12px; font-weight: 700; color: var(--muted); }
   .primary { display: block; width: 100%; margin-top: 22px; height: 52px; border: 0; border-radius: 14px; background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
   .primary:active { transform: scale(0.98); }
   .center { text-align: center; }
-  #d-view { margin-top: 12px; }
+  
   .how-title { margin: 14px 2px 14px; font-size: 28px; font-weight: 800; }
   .card h3 { margin: 0 0 10px; font-size: 16px; font-weight: 700; }
   .card.explain p { font-size: 13px; color: var(--ink-2); margin: 6px 0; }
-  .howto { list-style: none; counter-reset: step; margin: 16px auto 0; padding: 0; display: inline-flex; flex-direction: column; gap: 4px; text-align: left; font-size: 14px; color: var(--ink-2); }
-  .howto li { counter-increment: step; display: flex; gap: 8px; align-items: baseline; }
-  .howto li::before { content: counter(step); flex: none; width: 18px; height: 18px; border-radius: 999px; background: var(--wash); color: var(--ink); font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; transform: translateY(-1px); }
+  
+  
+  
   .row .go { color: var(--muted); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .obs { margin-top: 18px; }
   .obs-t { display: flex; flex-direction: column; text-align: left; }
@@ -431,10 +397,10 @@
   .side + .side { border-top: 1px solid var(--grid); margin-top: 8px; }
   .side h5 { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 12px; font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; }
   .side h5 small { font-weight: 500; color: var(--muted); }
-  .seal { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 100%; min-height: 96px; border: 0; border-radius: 16px; background: var(--on-bg); color: var(--on-ink); font: inherit; font-size: 17px; font-weight: 750; cursor: pointer; }
-  .seal small { font-size: 12.5px; font-weight: 500; opacity: 0.7; }
-  .seal:active { transform: scale(0.98); }
-  .seal[hidden] { display: none; }
+  
+  
+  
+  
   .row-link .obs-t { color: var(--ink); font-size: 15px; line-height: 1.3; }
   .row-link .rl-t { color: var(--ink); font-size: 15px; font-weight: 650; line-height: 1.3; text-align: left; }
   .row-link .rl-t small { display: block; margin-top: 3px; font-size: 12px; font-weight: 500; color: var(--muted); }
@@ -469,8 +435,16 @@
   .why-pair .conds { margin: 6px 0 10px; padding-left: 18px; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
   .why-pair .conds li.on { color: var(--ink); }
   .why-pair .cmpk + .cmpk { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--grid); }
-  .kinds-h { margin: 14px 0 0; font-size: 12px; font-weight: 600; color: var(--muted); }
-  .kinds-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 6px 0 8px; }
+  /* the Observatory: how frctlns works, not another analysis (2026-09-28, Shu and Nova) */
+  .wr-key { margin: 0 0 8px; font-size: 12.5px; color: var(--muted); }
+  .wrules .wr { display: grid; grid-template-columns: 1fr auto; gap: 1px 10px; padding: 9px 0; border-top: 1px solid var(--grid); font-size: 12.5px; line-height: 1.4; }
+  .wrules .wr:first-child { border-top: 0; }
+  .wrules .wr b { font-size: 13.5px; color: var(--ink); }
+  .wrules .wr .at { text-align: right; color: var(--ink-2); font-weight: 600; }
+  .wrules .wr .src { grid-column: 1 / -1; color: var(--ink-2); }
+  .wrules .wr .what { grid-column: 1 / -1; color: var(--muted); }
+  
+  
   /* the same two days through each lens (2026-09-28, Shu and Nova) */
   .lens { background: var(--surface); border-radius: 16px; box-shadow: 0 0 0 1px var(--ring); padding: 12px 14px 6px; margin: 4px 0 12px; }
   .lens h3 { margin: 0 0 6px; font-size: 14px; font-weight: 750; }
@@ -479,20 +453,20 @@
   .lens .ln { font-size: 13.5px; font-weight: 700; color: var(--ink); }
   #s-places-note .none-line { display: block; }
   .lens .lv { font-size: 14px; font-weight: 750; font-variant-numeric: tabular-nums; text-align: right; }
-  .lens .ld { grid-column: 1 / -1; font-size: 12px; line-height: 1.35; color: var(--muted); }
+  
   .lens .lr.cur .ln::after { content: " · found this place"; font-weight: 600; font-size: 11.5px; color: var(--muted); }
   .lens .lr.off .lv { color: var(--muted); font-weight: 600; }
-  .kinds-seg button { border: 0; border-radius: 12px; padding: 9px 10px; background: var(--surface); box-shadow: 0 0 0 1px var(--ring); color: var(--ink-2); font: inherit; font-size: 13.5px; font-weight: 650; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-  .kinds-seg button small { display: block; margin-top: 1px; font-size: 11px; font-weight: 500; color: var(--muted); }
-  .kinds-seg button[aria-pressed="true"] { background: var(--on-bg); color: var(--on-ink); box-shadow: none; }
-  .kinds-seg button[aria-pressed="true"] small { color: var(--on-ink); opacity: 0.75; }
-  .kinds-seg button:disabled { opacity: 0.4; cursor: default; }
-  #p-range:empty { display: none; }
-  .rows.kinds .row .kt { grid-column: 1 / -1; font-size: 13px; font-weight: 700; color: var(--ink-2); }
-  .row .pairdays { grid-column: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .row .pairdays .ar { color: var(--muted); font-weight: 600; }
-  .row .pairdays .none { color: var(--muted); font-weight: 500; font-size: 13px; }
-  .row .why { grid-column: 1 / -1; font-size: 13px; font-weight: 650; line-height: 1.3; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   .rows > .row.off { cursor: default; }
   .rows > .row.off:active { background: transparent; }
   .tile .tn .ta { float: right; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -500,7 +474,7 @@
   footer { font-size: 12px; color: var(--muted); padding: 6px 2px; }
   footer a { color: var(--ink-2); }
   .loading { opacity: 0.55; transition: opacity 0.15s; }
-  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  
   /* ── two ways in (2026-09-27, Shu and Nova): the world or the market, then the same walk ── */
   .hero { padding: 16px 2px 6px; }
   .hero h1 { font-size: 30px; line-height: 1.1; }
@@ -512,8 +486,8 @@
   .coin[aria-disabled="true"] { opacity: 0.45; cursor: default; }
   .coin small { font-size: 9.5px; font-weight: 600; letter-spacing: 0; margin-top: -1px; }
   .coin:active:not([aria-disabled="true"]) { transform: scale(0.96); }
-  .seg.entry { margin-bottom: 14px; }
-  .seg.entry button { height: 42px; font-size: 15px; }
+  
+  
   .entrance { animation: rise 0.22s ease-out both; }
   .entrance[hidden] { display: none; }
   .ask { display: flex; gap: 8px; }
@@ -534,14 +508,14 @@
   .block h3, .subhead { margin: 0; font-size: 15px; font-weight: 700; }
   .subhead { margin: 22px 2px 6px; }
   .block .list-head { margin-top: 4px; }
-  #s-moments-wrap { margin-bottom: 18px; }
+  
   .day-head .what { margin: 6px 0 0; font-size: 14px; line-height: 1.35; color: var(--ink); }
   .day-head .what:empty { display: none; }
   .how-coin { margin: -8px 2px 6px; font-size: 13px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-  #s-moves-wrap { margin-bottom: 18px; }
-  .lock { margin-top: 2px; font-size: 14px; font-weight: 600; color: var(--ink-2); }
-  .lock span { font-size: 16px; }
-  .state-head { margin-top: 4px; }
+  
+  
+  
+  
   .mt { margin-top: 6px; background: var(--surface); border-radius: 16px; box-shadow: 0 0 0 1px var(--ring); padding: 8px 6px 4px; }
   .mt svg { display: block; width: 100%; height: auto; }
   .mt-sum { margin: 10px 2px 0; font-size: 14px; line-height: 1.4; color: var(--ink); }
@@ -554,7 +528,7 @@
   .pcmp .r i { display: inline-block; width: 8px; height: 8px; border-radius: 999px; }
   .pcmp svg { display: block; width: 100%; height: auto; }
   .pcmp .n { margin: 4px 0 0; font-size: 11.5px; color: var(--muted); }
-  #s-pattern-wrap { margin-bottom: 18px; }
+  
   .ptab { display: grid; grid-template-columns: 1fr auto auto; gap: 4px 14px; align-items: center; margin: 4px 0 2px; font-size: 13px; }
   .ptab .h { font-size: 11px; color: var(--muted); text-align: center; }
   .ptab .n2 { color: var(--ink-2); font-weight: 600; }
@@ -704,63 +678,40 @@
   <main id="v-how" class="screen" hidden aria-label="How frctlns works">
     <h1 class="how-title">Observatory</h1>
     <p id="how-coin" class="how-coin"></p>
-    <p class="lead" style="margin:0 2px 14px">Everything behind the day you stand on: the numbers, how alike each window looks, when each window knew what.</p>
-
-    <section class="card">
-      <h3>Look differently</h3>
-      <p class="label">Window</p>
-      <div id="width" class="seg" role="group" aria-label="Window in days"></div>
-      <p class="label">Compare by</p>
-      <div id="mode" class="seg" role="group" aria-label="Compare by">
-        <button type="button" data-mode="STATE">Where it stood</button>
-        <button type="button" data-mode="TRAJECTORY">How it moved</button>
-      </div>
-      <p id="mode-hint" class="hint"></p>
-      <p class="label">What the market is made of</p>
-      <div id="chips" class="chips"></div>
-      <p class="chip-key">● on · ○ off (tap) · – absent (no data for this window)</p>
-      <div id="absent-why" class="chip-key" style="margin-top:4px"></div>
-    </section>
-
-    <section class="card">
-      <h3>The numbers behind it</h3>
-      <div id="status-detail" class="detail"></div>
-      <table id="table" aria-label="Checkpoints"></table>
-      <div id="why-wrap">
-        <p class="label" style="margin-top:14px">Why it matched (market)</p>
-        <div id="why" class="why"></div>
-      </div>
-    </section>
-
-    <section class="card">
-      <h3>Through each window</h3>
-      <div id="compare-grid" class="cmp" role="table" aria-label="How alike each day looks to D, window by window"></div>
-      <div id="compare-notes" class="cmp-notes"></div>
-    </section>
-
+    <p class="lead" style="margin:0 2px 14px">Everything behind the overlaps: when each window knew what, how overlaps are found, and where each window's data comes from.</p>
     <section class="card">
       <h3>When each window knew what</h3>
       <div id="times"></div>
     </section>
-
     <section class="card explain">
       <h3>How frctlns finds overlaps</h3>
-      <p><strong>Places that overlap</strong>: for the day you stand on, frctlns looks in several ways at once and lists every day it found, the most overlap first: the mean of what “What overlapped?” shows for the pair (at 00:00, afterwards, and the share of your day's jumping windows that jumped there too). Each place carries a mark for the way it overlapped: <strong>at 00:00</strong> (the market stood alike), <strong>afterwards</strong> (the price moved in the same shape), <strong>N windows</strong> (the same windows jumped together), or the word you came with. Each way uses one fixed condition, written under “Why this pair?”. What each way found nothing for is said under the list.</p>
-      <p><strong>Where it stood</strong> (STATE) puts each axis on a 0–1 scale: where it stood within its own past year, using only data up to that day. Price, market cap, volatility and the change figures use the past-year range; volume is compared on a log scale; Fear &amp; Greed is its 0–100 value. With less than 30 days of past an axis is absent.</p>
-      <p><strong>How it moved</strong> (TRAJECTORY) compares how things moved inside the window, from its first day: price as % change, volume against the window's median (log), volatility as is, Fear &amp; Greed as points gained or lost. Each axis has a fixed scale, so a match does not depend on which other windows were searched.</p>
-      <p><strong>Strict time</strong> (at 00:00): a past day only counts if its next 30 days had already happened by D, and nothing after D is used to find it. What came after is shown next to the pair, never used to choose it.</p>
-      <p><strong>Later in history</strong>: near the start of the archive there may be fewer than five such days. Only then, frctlns fills the list with days from after D, marked “later in history”. Their replays start after D's own next 30 days, so D's future still takes no part in finding them; what they show is hindsight.</p>
-      <p><strong>Spacing</strong>: the look-alike days are at least 30 days apart, so one long stretch of the market is not shown five times. If several still come from the same season, that stretch really did last.</p>
-      <p><strong>Short and incomplete history</strong>: a day in the archive's first year has less than a year behind it (short history); a later day can have gaps in its past year (incomplete history). Both stay in the list, marked with how many days were there to compare.</p>
-      <p>Only axes present on both sides are compared; their weights are shared out again. A past day is compared only if at least half of D's axes (by weight) can be compared there — the ones left out are counted, not hidden.</p>
-      <p><strong>Afterwards</strong> (hindsight) is not where the market stood, but how it moved. It compares the shape of the price from a little before the day to a week after it, with every other day in the archive, earlier or later. Only the shape counts — a move a third of the size, or one that took half or twice as long, can still match — and each result shows how much it really moved. It uses what happened after the day, so it is marked hindsight.</p>
-      <p><strong>Together</strong> (hindsight) takes the set of windows that made an unusual jump on your day or the day after, and looks across the whole archive for the other days when all of them jumped again — the same windows, whichever way they went; the directions are shown, not required.</p>
-      <p><strong>What moved with it?</strong> (hindsight) lays the same 38 days — a week before the day to a month after — under each other, one line per window: the coin's price, Fear &amp; Greed and the Bitcoin network; the coin on Wikipedia and on Hacker News; Nasdaq, VIX and the US dollar (FRED); and all of English Wikipedia. Each line is scaled to its own range. A dot marks a day that was unusual for that window: a change at least three times its usual day-to-day change over the year before (for Hacker News, at least three times the month's usual count). frctlns does not say what caused what. Some windows move together, some later, some not at all — and nothing lining up is a result too.</p>
-      <p><strong>What overlapped?</strong> measures the pair every way, with the same conditions, whichever way found it. <strong>The windows of a pair</strong> are ordered by how alike the two days look through each one: 1 − the mean gap between their places within each one's own past year (for the market, every part of it). Headlines, pictures and the X door have no number, so they come after.</p>
-      <p><strong>Fear &amp; Greed</strong> is CMC's index for the whole crypto market. It is the same for every coin: on an ETH day it tells the mood of the market around ETH, not ETH's own.</p>
-      <p><strong>Other windows</strong> (Wikipedia, weather, the Bitcoin network and the rest) never change which days are found. They only show how that day looked from somewhere else, using what had come out by 00:00 UTC of each day. Attention follows the coin you chose (its English Wikipedia article); the Bitcoin network is Bitcoin's own chain, shown for every coin.</p>
-      <p><strong>From the world</strong>: a word, topic or event finds the days it left public traces — the day its English Wikipedia article was read far more than usual (from 2015-07-01), or the day a Hacker News story with the word in its title got its most points (from 2013). These are attention traces found with today's records, not an event detector. Through the windows, each day shows what had come out by its 00:00 UTC; the day itself is shown after that, as recorded now.</p>
-      <p>frctlns shows what followed similar days. It is not a forecast and not investment advice.</p>
+      <p><strong>Places that overlap</strong>: for the day you stand on, frctlns looks three ways at once — four when you came with a word — and lists every day it found, the most overlap first.</p>
+      <p><strong>At 00:00</strong>: where the market stood over the 7 days up to each day — price, market cap, volume, volatility, 24h / 7d / 30d change and Fear &amp; Greed, each as a place within its own past year. Only what was out by 00:00 UTC of each day is used, and an earlier day counts only if its own next 30 days had already happened.</p>
+      <p><strong>Afterwards</strong> (hindsight): the shape of the price from 2 days before to a week after. Only the shape counts — a smaller move, or one that took half or twice as long, can still match.</p>
+      <p><strong>Together</strong> (hindsight): the set of windows that made an unusual jump on the day or the day after — a change at least 3× that window's usual day-to-day change over the year before — found again on another day. The directions are shown, not required.</p>
+      <p><strong>The word</strong>: the days a word left public traces — its English Wikipedia article read far more than usual (from 2015-07-01), or a Hacker News story with it in the title at its most points. Found with today's records; not an event detector.</p>
+      <p><strong>What overlapped?</strong> measures each pair all three ways, with the same conditions; the order of the places is the mean of the three.</p>
+      <p><strong>When data is missing</strong>: only what both days have is compared, and a day is compared only if at least half of the market can be. A day in a coin's first year has a short past, and is marked so.</p>
+      <p><strong>Hindsight</strong>: afterwards, together and what moved with it use what happened after the day, and say so. What came after is always shown; at 00:00 never uses it.</p>
+      <p>Fear &amp; Greed is CMC's index for the whole crypto market, and the Bitcoin network is Bitcoin's own chain: both are the same for every coin.</p>
+      <p>frctlns observes; it does not predict. It is not investment advice.</p>
+    </section>
+    <section class="card">
+      <h3>Windows and their sources</h3>
+      <p class="wr-key">“At 00:00” is the newest day each window had out at 00:00 UTC of the day you stand on.</p>
+      <div class="wrules">
+        <div class="wr"><b>Market</b><span class="at">at 00:00: the day itself</span><span class="src">CoinMarketCap API</span><span class="what">price, volume, market cap, daily range, 24h / 7d / 30d change (quotes at 00:00; the candle that closed at the end of the day before) · Fear &amp; Greed</span></div>
+        <div class="wr"><b>Attention</b><span class="at">at 00:00: 2 days before</span><span class="src">Wikimedia pageviews</span><span class="what">views of the coin's English Wikipedia article; the most-read pages in English and Japanese</span></div>
+        <div class="wr"><b>Bitcoin network</b><span class="at">at 00:00: 2 days before</span><span class="src">Blockchain.com</span><span class="what">confirmed transactions; hash rate (7-day average)</span></div>
+        <div class="wr"><b>Hacker News</b><span class="at">at 00:00: the day before</span><span class="src">HN Search (Algolia)</span><span class="what">the top stories posted that day</span></div>
+        <div class="wr"><b>X</b><span class="at">at 00:00: the day before</span><span class="src">X search (a link only)</span><span class="what">a search for the coin's name on one UTC day; frctlns reads nothing from X</span></div>
+        <div class="wr"><b>Money</b><span class="at">at 00:00: the last business day</span><span class="src">ECB rates via Frankfurter</span><span class="what">USD/JPY and USD/EUR</span></div>
+        <div class="wr"><b>Earth</b><span class="at">at 00:00: the day before</span><span class="src">USGS earthquake catalog</span><span class="what">earthquakes of magnitude 4.5+, and the largest</span></div>
+        <div class="wr"><b>Sky</b><span class="at">at 00:00: the day before</span><span class="src">NASA Astronomy Picture of the Day</span><span class="what">the picture's title and credit</span></div>
+        <div class="wr"><b>Weather</b><span class="at">at 00:00: 2 days before</span><span class="src">Open-Meteo</span><span class="what">the day's weather in one of ten cities</span></div>
+        <div class="wr"><b>Nasdaq · VIX · US dollar</b><span class="at">what moved with it (hindsight)</span><span class="src">FRED</span><span class="what">daily closes; markets are closed at weekends</span></div>
+        <div class="wr"><b>All of Wikipedia</b><span class="at">what moved with it (hindsight)</span><span class="src">Wikimedia pageviews</span><span class="what">total views of English Wikipedia</span></div>
+      </div>
     </section>
     <footer id="footer-how"></footer>
   </main>
