@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>RE: Temporal Playground</title>
-<meta name="description" content="Pick a day in Bitcoin's history. RE: finds the most similar pasts that were already visible from that day, and replays what came after them.">
+<meta name="description" content="Stand on a moment in time — found from the world or from the crypto market — look through the windows as they were at 00:00, then open what happened next.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23F6B896'/%3E%3Ctext x='30' y='42' font-family='system-ui,sans-serif' font-size='27' font-weight='800' fill='%23f9f9f7' text-anchor='middle'%3ERE%3Ctspan fill='%23D3CEC7'%3E:%3C/tspan%3E%3C/text%3E%3C/svg%3E">
 <style>
   :root {
@@ -443,6 +443,43 @@
   footer a { color: var(--ink-2); }
   .loading { opacity: 0.55; transition: opacity 0.15s; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  /* ── two ways in (2026-09-27, Shu and Nova): the world or the market, then the same walk ── */
+  .hero { padding: 16px 2px 6px; }
+  .hero h1 { font-size: 30px; line-height: 1.1; }
+  .hero .lede { margin: 10px 0 0; font-size: 15px; }
+  .coins { display: flex; gap: 6px; margin: 14px 0 12px; overflow-x: auto; scrollbar-width: none; }
+  .coins::-webkit-scrollbar { display: none; }
+  .coin { flex: none; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-width: 58px; min-height: 40px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--wash); color: var(--ink-2); font: inherit; font-size: 14px; font-weight: 700; letter-spacing: 0.02em; cursor: pointer; }
+  .coin[aria-pressed="true"] { background: var(--on-bg); color: var(--on-ink); }
+  .coin[aria-disabled="true"] { opacity: 0.45; cursor: default; }
+  .coin small { font-size: 9.5px; font-weight: 600; letter-spacing: 0; margin-top: -1px; }
+  .coin:active:not([aria-disabled="true"]) { transform: scale(0.96); }
+  .seg.entry { margin-bottom: 14px; }
+  .seg.entry button { height: 42px; font-size: 15px; }
+  .entrance { animation: rise 0.22s ease-out both; }
+  .entrance[hidden] { display: none; }
+  .ask { display: flex; gap: 8px; }
+  .ask input { flex: 1; min-width: 0; height: 48px; padding: 0 14px; font: inherit; font-size: 17px; color: var(--ink); background: var(--surface); border: 0; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--ring); -webkit-appearance: none; appearance: none; }
+  .ask input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--series-d); }
+  .ask button { flex: none; height: 48px; padding: 0 18px; border: 0; border-radius: 12px; background: var(--on-bg); color: var(--on-ink); font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
+  .ask button:active { transform: scale(0.97); }
+  .words { margin: 10px 0 18px; }
+  .words button { font-size: 13px; min-height: 34px; padding: 0 12px; }
+  .rows[hidden] { display: none; }
+  #e-world .list-head:has(h2:empty) { display: none; }
+  .row.moment { grid-template-columns: 1fr auto 14px; }
+  .row .what { grid-column: 1 / 3; font-size: 14px; line-height: 1.3; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; margin-top: 2px; }
+  .row .go.down, .row .go.up { color: var(--ink); font-weight: 700; }
+  .ctx { margin: 12px 2px 0; font-size: 14px; line-height: 1.35; color: var(--ink-2); text-align: center; }
+  .ctx:empty { display: none; }
+  .ctx .tag { display: inline-block; margin: 0 6px 4px 0; padding: 2px 9px; border-radius: 999px; background: var(--wash); color: var(--ink); font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .block h3, .subhead { margin: 0; font-size: 15px; font-weight: 700; }
+  .subhead { margin: 22px 2px 6px; }
+  .block .list-head { margin-top: 4px; }
+  #s-moments-wrap { margin-bottom: 18px; }
+  .day-head .what { margin: 6px 0 0; font-size: 14px; line-height: 1.35; color: var(--ink); }
+  .day-head .what:empty { display: none; }
+  .how-coin { margin: -8px 2px 6px; font-size: 13px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -452,9 +489,44 @@
     <button id="mark" class="mark" type="button" aria-label="RE: — back to the day you stand on">RE<span class="colon">:</span></button>
   </header>
 
-  <!-- 1. the day you stand on -->
-  <main id="v-home" class="screen" aria-label="The day you stand on">
-    <section class="stage" aria-label="Pick a day">
+  <!-- 1. the start: where do you want to stand? -->
+  <main id="v-home" class="screen" aria-label="Where do you want to stand?">
+    <section class="hero">
+      <h1>Where do you want to stand?</h1>
+      <p class="lede">Find a moment in time. Stand on it, look through the windows as they were at 00:00, then open what happened next.</p>
+    </section>
+    <div id="coins" class="coins" role="group" aria-label="Which market"></div>
+    <div id="entry" class="seg entry" role="group" aria-label="Start from">
+      <button type="button" data-t="world">From the world</button>
+      <button type="button" data-t="market">From the market</button>
+    </div>
+    <div id="status-home" aria-live="polite"></div>
+
+    <section id="e-world" class="entrance" aria-label="From the world">
+      <form id="ask" class="ask" role="search">
+        <input id="q" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="40" placeholder="What was happening?" aria-label="What was happening? A word, in English">
+        <button type="submit">Find</button>
+      </form>
+      <div id="words" class="try words" role="group" aria-label="Words to try"></div>
+      <div class="list-head"><h2 id="w-title"></h2><span id="w-found" class="quiet-inline"></span></div>
+      <div id="w-rows" class="rows" hidden></div>
+      <p id="w-how" class="quiet"></p>
+    </section>
+
+    <section id="e-market" class="entrance" aria-label="From the market" hidden>
+      <div class="list-head"><h2>When <span class="coin-sym">BTC</span> moved the most</h2><span class="quiet-inline">in one day, 00:00 to 00:00 UTC · found with hindsight</span></div>
+      <div id="m-rows" class="rows"></div>
+      <button id="pick-day" class="row-link" type="button">Or pick any day <span aria-hidden="true">›</span></button>
+    </section>
+
+    <button id="how-link" class="row-link obs" type="button"><span class="obs-t">Observatory<small>Every number behind RE:, window by window</small></span><span aria-hidden="true">›</span></button>
+    <footer id="footer"></footer>
+  </main>
+
+  <!-- 2. the day you stand on -->
+  <main id="v-stand" class="screen" hidden aria-label="The day you stand on">
+    <p id="s-ctx" class="ctx"></p>
+    <section class="stage" aria-label="The day">
       <label class="ov yr"><span id="h-yr" class="big-y"></span><select id="d-y" aria-label="Year"></select></label>
       <div class="md">
         <label class="ov"><span id="h-mo" class="big-md"></span><select id="d-m" aria-label="Month"></select></label>
@@ -466,36 +538,60 @@
         <button id="latest" type="button">Today</button>
         <button id="next-day" type="button" aria-label="The day after">›</button>
       </div>
-      <ol class="howto">
-        <li>Find a day that felt like this one.</li>
-        <li>Step into it — was it really alike?</li>
-        <li>Then open what happened next.</li>
-      </ol>
-      <div id="try" class="try" role="group" aria-label="Days to try"></div>
     </section>
 
-    <section class="list" aria-label="Days that looked like it">
-      <div class="list-head"><h2>Go somewhere similar</h2><span id="found" class="quiet-inline"></span></div>
+    <section class="block" aria-label="What could be seen at 00:00">
+      <h2>What could be seen at 00:00?</h2>
+      <p class="lead">Each window shows the newest day it had out at 00:00 UTC — never the day itself.</p>
+      <div id="s-tiles" class="tiles"></div>
+      <div id="s-open" class="opened" aria-live="polite"></div>
+    </section>
+
+    <section class="block" aria-label="What happened next">
+      <h2>What happened next?</h2>
+      <button id="s-seal" class="seal" type="button"><span>Open what happened next</span><small id="s-seal-note"></small></button>
+      <div id="s-next" hidden>
+        <div id="s-checks" class="checks"></div>
+        <div class="chart-wrap">
+          <svg id="s-chart" viewBox="0 0 360 230" role="img" tabindex="0" aria-label="Price change after the day"></svg>
+          <div id="s-tip" class="tip" aria-hidden="true"></div>
+        </div>
+        <p id="s-after" class="quiet"></p>
+        <h3 class="subhead">The day itself, as recorded now</h3>
+        <p class="lead">None of this could be seen at 00:00. RE: never uses it to find look-alike days.</p>
+        <div id="h-tiles" class="tiles"></div>
+        <div id="h-open" class="opened" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section class="block" aria-label="Go somewhere like it">
+      <h2>Go somewhere like it</h2>
+      <div id="s-moments-wrap" hidden>
+        <div class="list-head"><h3 id="s-moments-title"></h3><span class="quiet-inline">the same word, another time</span></div>
+        <div id="s-moments" class="rows"></div>
+      </div>
+      <div class="list-head"><h3>Days when <span class="coin-sym">BTC</span> looked like this</h3><span id="found" class="quiet-inline"></span></div>
+      <div id="s-width" class="seg mini" role="group" aria-label="Alike over"></div>
       <div id="status" aria-live="polite"></div>
       <div id="results" class="rows"></div>
     </section>
 
-    <button id="how-link" class="row-link obs" type="button"><span class="obs-t">Observatory<small>Every number behind RE:, window by window</small></span><span aria-hidden="true">›</span></button>
-    <footer id="footer"></footer>
+    <button id="how-link2" class="row-link obs" type="button"><span class="obs-t">Observatory<small>How this day was compared, window by window</small></span><span aria-hidden="true">›</span></button>
   </main>
 
-  <!-- 2. inside a day that looked like it -->
-  <main id="v-past" class="screen" hidden aria-label="A day that looked like it">
+  <!-- 3. two days side by side -->
+  <main id="v-past" class="screen" hidden aria-label="Two days side by side">
     <header class="day-head">
       <h1 id="p-title"></h1>
       <p id="p-sub" class="sub"></p>
+      <p id="p-what" class="what"></p>
       <p id="p-hist" class="hist"></p>
       <div class="pnav"><button id="p-prev" type="button">‹ Previous</button><button id="p-next" type="button">Next ›</button></div>
     </header>
 
     <section class="block" aria-label="Was it really alike?">
       <h2>Was it really alike?</h2>
-      <p class="lead">The market says these two days felt the same. Look at both through the same windows, as each looked at 00:00 UTC.</p>
+      <p id="p-lead" class="lead"></p>
       <div class="pairkey"><span><i style="background:var(--series-d)"></i><b id="k-d"></b> your day</span><span><i style="background:var(--series-sel)"></i><b id="k-p"></b> that day</span></div>
       <div id="p-tiles" class="tiles"></div>
       <div id="p-open" class="opened" aria-live="polite"></div>
@@ -519,28 +615,11 @@
     <p id="stand-note" class="quiet center"></p>
   </main>
 
-  <!-- 3. the day you stand on, seen through the windows -->
-  <main id="v-day" class="screen" hidden aria-label="Look around this day">
-    <header class="day-head">
-      <h1 id="d-title"></h1>
-      <p class="sub">The day you stand on</p>
-    </header>
-    <div id="d-view" class="seg" role="group" aria-label="Seen when">
-      <button type="button" data-dv="asof">As seen at 00:00</button>
-      <button type="button" data-dv="hind">As known now</button>
-    </div>
-    <p id="d-note" class="quiet"></p>
-    <section class="block" aria-label="The world that day">
-      <div id="d-tiles" class="tiles"></div>
-      <div id="d-open" class="opened" aria-live="polite"></div>
-    </section>
-  </main>
-
   <!-- 4. how it works, and the knobs -->
   <main id="v-how" class="screen" hidden aria-label="How RE: works">
     <h1 class="how-title">Observatory</h1>
-    <p class="lead" style="margin:-6px 2px 14px">Everything behind the day you stand on: the numbers, how alike each window looks, when each window knew what.</p>
-    <button id="look" class="row-link" type="button" style="margin:0 0 12px">Your day through every window <span aria-hidden="true">›</span></button>
+    <p id="how-coin" class="how-coin"></p>
+    <p class="lead" style="margin:0 2px 14px">Everything behind the day you stand on: the numbers, how alike each window looks, when each window knew what.</p>
 
     <section class="card">
       <h3>Look differently</h3>
@@ -588,7 +667,9 @@
       <p><strong>Spacing</strong>: the look-alike days are at least 30 days apart, so one long stretch of the market is not shown five times. If several still come from the same season, that stretch really did last.</p>
       <p><strong>Short and incomplete history</strong>: a day in the archive's first year has less than a year behind it (short history); a later day can have gaps in its past year (incomplete history). Both stay in the list, marked with how many days were there to compare.</p>
       <p>Only axes present on both sides are compared; their weights are shared out again. A past day is compared only if at least half of D's axes (by weight) can be compared there — the ones left out are counted, not hidden.</p>
-      <p><strong>Other windows</strong> (Wikipedia, weather, the Bitcoin network and the rest) never change which days are found. They only show how that day looked from somewhere else, using what had come out by 00:00 UTC of each day.</p>
+      <p><strong>Fear &amp; Greed</strong> is CMC's index for the whole crypto market. It is the same for every coin: on an ETH day it tells the mood of the market around ETH, not ETH's own.</p>
+      <p><strong>Other windows</strong> (Wikipedia, weather, the Bitcoin network and the rest) never change which days are found. They only show how that day looked from somewhere else, using what had come out by 00:00 UTC of each day. Attention follows the coin you chose (its English Wikipedia article); the Bitcoin network is Bitcoin's own chain, shown for every coin.</p>
+      <p><strong>From the world</strong>: a word finds the days it was happening — the day its English Wikipedia article was read far more than usual (from 2015-07-01), or the day a Hacker News story about it got its most points (from 2013). These days are found with today's records. Once you stand on one, you see only what had come out by its 00:00 UTC; the day itself opens with what happened next.</p>
       <p>RE: shows what followed similar days. It is not a forecast and not investment advice.</p>
     </section>
     <footer id="footer-how"></footer>
