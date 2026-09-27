@@ -483,6 +483,84 @@ export function windowSimilarity(comps, q, c, w) {
 }
 
 /* まとめて使う入口 */
+/* ──────────────────────────────────────────
+   動きが似ている日（Moves like this, 2026-09-28 しゅう・ノヴァ）— 後知恵
+   「状態」ではなく「変化」の類似。その日の少し前から、その後 span 日までの値動きの形を比べる。
+   ・形だけを見る：log 価格の道のりを平均0・ばらつき1にそろえてから比べる（相関）。
+     だから −10% と −40% でも、形が同じなら似ている（大きさは結果に並べて見せる）
+   ・時間の長さも固定しない：候補の側は 0.5倍・1倍・2倍の長さで測り直して、一番似ているものを使う
+     （3日で起きたことと、2週間かけて起きたことも比べられる）
+   ・過去も未来も探す。その日の未来を使うので、画面では What happened next を開いた後にだけ出す
+   ・候補どうし・その日とは PICK_GAP_DAYS 以上離す。ほとんど動いていない期間（値動きの幅がその日の 1/4 未満）は外す
+   ────────────────────────────────────────── */
+export const MOVE_SPANS = [3, 7, 30];
+export const MOVE_STRETCHES = [0.5, 1, 2];
+const MOVE_POINTS = 24;
+const MOVE_MIN_RANGE = 0.25;
+export function movesLike(tl, i, span, { top = 5, stretches = MOVE_STRETCHES, gap = PICK_GAP_DAYS } = {}) {
+  const P = tl.axes.price;
+  const lead = Math.max(1, Math.round(span / 3));
+  const buf = new Float64Array(MOVE_POINTS);
+  // the log-price path around day c, stretched by k, sampled at MOVE_POINTS points and centred at c
+  const sample = (c, k, out) => {
+    const a = c - Math.max(1, Math.round(lead * k)), b = c + Math.max(1, Math.round(span * k));
+    if (a < 0 || b >= tl.n || !(P[c] > 0) || !(P[b] > 0)) return null;
+    const l0 = Math.log(P[c]);
+    let lo = Infinity, hi = -Infinity;
+    for (let j = 0; j < MOVE_POINTS; j++) {
+      const t = a + ((b - a) * j) / (MOVE_POINTS - 1);
+      const x0 = Math.floor(t), x1 = Math.min(b, x0 + 1), f = t - x0;
+      if (!(P[x0] > 0) || !(P[x1] > 0)) return null;
+      const v = Math.log(P[x0]) * (1 - f) + Math.log(P[x1]) * f - l0;
+      out[j] = v;
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+    return { range: hi - lo, move: P[b] / P[c] - 1, days: b - c };
+  };
+  const zOf = (v) => {
+    let m = 0;
+    for (const x of v) m += x;
+    m /= v.length;
+    let sd = 0;
+    for (const x of v) sd += (x - m) ** 2;
+    sd = Math.sqrt(sd / v.length);
+    return sd > 0 ? Float64Array.from(v, (x) => (x - m) / sd) : null;
+  };
+  const qv = new Float64Array(MOVE_POINTS);
+  const q = sample(i, 1, qv);
+  if (!q) return { error: i + span >= tl.n ? "not enough days after this one yet" : "the price is missing around this day", results: [], span };
+  const qz = zOf(qv);
+  if (!qz) return { error: "the price did not move", results: [], span };
+  const best = [];
+  for (let c = 0; c < tl.n; c++) {
+    if (Math.abs(c - i) < gap) continue;
+    let pick = null;
+    for (const k of stretches) {
+      const s = sample(c, k, buf);
+      if (!s || s.range < MOVE_MIN_RANGE * q.range) continue;
+      const cz = zOf(buf);
+      if (!cz) continue;
+      let r = 0;
+      for (let j = 0; j < MOVE_POINTS; j++) r += qz[j] * cz[j];
+      r /= MOVE_POINTS;
+      if (!pick || r > pick.r) pick = { r, k, move: s.move, days: s.days };
+    }
+    if (pick && pick.r > 0) best.push({ c, ...pick });
+  }
+  best.sort((a, b) => b.r - a.r);
+  const out = [];
+  for (const x of best) {
+    if (out.every((y) => Math.abs(y.c - x.c) >= gap)) out.push(x);
+    if (out.length === top) break;
+  }
+  return {
+    span, lead, query: { day: dayAt(tl, i), move: q.move, days: q.days },
+    searched: best.length,
+    results: out.map((x) => ({ day: dayAt(tl, x.c), index: x.c, similarity: Math.round(x.r * 1000) / 1000, stretch: x.k, days: x.days, move: x.move, later: x.c > i })),
+  };
+}
+
 export function createExplorer(series) {
   const tl = buildTimeline(series);
   const st = buildStates(tl);
@@ -492,5 +570,6 @@ export function createExplorer(series) {
     presence: (day, mode, width) => axisPresence(tl, st, mode, indexOf(tl, day), width),
     search: (opts) => search(tl, st, opts),
     replay: (day, limitDay) => replay(tl, indexOf(tl, day), indexOf(tl, limitDay)),
+    movesLike: (day, span, opts) => movesLike(tl, indexOf(tl, day), span, opts),
   };
 }
