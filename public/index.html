@@ -215,18 +215,16 @@
   .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); margin: 2px 0 6px; }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .legend i { display: inline-block; width: 16px; height: 2px; border-radius: 1px; }
+  /* what a touch reads: under the chart, never over the lines (2026-09-28, Shu: the pop-up hid the lines) */
   .tip {
-    position: absolute;
-    top: 6px;
     pointer-events: none;
-    background: var(--surface);
-    box-shadow: 0 0 0 1px var(--ring), 0 6px 20px rgba(0, 0, 0, 0.12);
-    border-radius: 10px;
-    padding: 8px 10px;
+    border-top: 1px solid var(--grid);
+    margin: 2px 8px 0;
+    padding: 8px 2px 4px;
     font-size: 12px;
-    min-width: 150px;
-    display: none;
+    min-height: 58px;
   }
+  .tip .hint { color: var(--muted); padding-top: 10px; }
   .tip .t { color: var(--muted); margin-bottom: 4px; }
   .tip .r { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
   .tip .r b { min-width: 58px; text-align: right; font-weight: 700; color: var(--ink); }
@@ -652,15 +650,7 @@
       <div class="pnav"><button id="p-prev" type="button">‹ Previous</button><button id="p-next" type="button">Next ›</button></div>
     </header>
 
-    <section class="block" aria-label="Was it really alike?">
-      <h2>Was it really alike?</h2>
-      <p id="p-lead" class="lead"></p>
-      <div id="p-lens" class="lens" aria-live="polite"></div>
-      <div id="p-cmp" class="pcmp"></div>
-      <div class="pairkey"><span><i style="background:var(--series-d)"></i><b id="k-d"></b> your day</span><span><i style="background:var(--series-sel)"></i><b id="k-p"></b> that day</span></div>
-      <div id="p-tiles" class="tiles"></div>
-      <div id="p-open" class="opened" aria-live="polite"></div>
-    </section>
+    <div id="p-lens" class="lens" aria-live="polite"></div>
 
     <section class="block" aria-label="What happened next">
       <h2>What happened next?</h2>
@@ -674,6 +664,16 @@
         <p id="p-hidden" class="quiet"></p>
       </div>
     </section>
+
+    <section class="block" aria-label="Was it really alike?">
+      <h2>Was it really alike?</h2>
+      <p id="p-lead" class="lead"></p>
+      <div id="p-cmp" class="pcmp"></div>
+      <div class="pairkey"><span><i style="background:var(--series-d)"></i><b id="k-d"></b> your day</span><span><i style="background:var(--series-sel)"></i><b id="k-p"></b> that day</span></div>
+      <div id="p-tiles" class="tiles"></div>
+      <div id="p-open" class="opened" aria-live="polite"></div>
+    </section>
+
 
     <button id="stand" class="primary" type="button"></button>
     <p id="stand-note" class="quiet center"></p>

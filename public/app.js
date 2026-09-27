@@ -1197,6 +1197,8 @@ function drawNext(r, animate) {
     : r.kind === "p" ? "Found using what happened on both days and the day after (hindsight)."
     : r.kind === "v" ? (r.stretch !== 1 ? `Found using what happened after both days (hindsight). This move took ${r.stretch < 1 ? "about half as long" : "about twice as long"} as yours, so on the same days the shapes line up only roughly.` : "Found using what happened after both days (hindsight).")
     : `Found using only what the market showed up to 00:00 on each day. What came after is shown here, not used to find it.` + (r.later ? ` ${r.day} is later in history, so everything shown for it happened after your day.` : "");
+  const p1 = D.points.find((p) => p.offset === 1);
+  if (p1 && p1.state === "unknown") $("p-hidden").textContent += ` ${S.day} is the newest day in the archive, so what came after it is not known yet.`;
 }
 
 /* ── what was compared: the two ranges of days, drawn as two lines on the same axis ──
@@ -2142,6 +2144,7 @@ function drawChart(v) {
   svgEl.append(v.cursorLayer);
   svgEl.setAttribute("aria-label", `Price change from the day, ${MINUS}${-lo} to +${hi} days.${v.band ? ` Shaded: the days that were compared.` : ""} D is ${S.day}${sS ? `; the other day is ${sS.name}` : ""}.`);
   if (v.cursor !== null && v.cursor !== undefined) showAt(v, v.cursor);
+  else tipHint(v);
 }
 function pointAt(v, e) {
   if (!v.series || !v.X) return;
@@ -2162,6 +2165,7 @@ function showAt(v, o) {
   const tip = $(v.tipId);
   tip.textContent = "";
   tip.append(el("div", { class: "t" }, o === 0 ? "That day" : `${o > 0 ? "+" : MINUS}${Math.abs(o)} days from the day`));
+  order.sort((a, b) => (a.kind === "d" ? -1 : b.kind === "d" ? 1 : 0)); // your day first, as in the legend
   for (const s of order) {
     const y = s.rep.path[o - v.lo];
     if (y !== null) L.append(svg("circle", { cx: x, cy: v.Y(y), r: s.kind === "context" ? 3 : 4, fill: color[s.kind], stroke: "var(--surface)", "stroke-width": 2 }));
@@ -2170,16 +2174,17 @@ function showAt(v, o) {
     row.append(el("i", { style: `background:${color[s.kind]}` }), el("b", {}, y === null ? (s.kind === "d" && o > 0 && !s.open ? "unknown" : "—") : pct(y)), el("span", {}, s.kind === "d" ? `D · ${day}` : day));
     tip.append(row);
   }
-  tip.style.display = "block";
-  const wrap = $(v.svgId).getBoundingClientRect();
-  const px = (x / v.W) * wrap.width;
-  const tw = tip.offsetWidth;
-  tip.style.left = (px + 12 + tw < wrap.width ? px + 12 : Math.max(0, px - 12 - tw)) + "px";
+}
+/* the readout under the chart, when nothing is touched */
+function tipHint(v) {
+  const tip = $(v.tipId);
+  tip.textContent = "";
+  tip.append(el("div", { class: "hint" }, "Touch the chart to read any day."));
 }
 function hideTip(v) {
   v.cursor = null;
   if (v.cursorLayer) v.cursorLayer.textContent = "";
-  $(v.tipId).style.display = "none";
+  tipHint(v);
 }
 
 function renderTable(D, selRep, r, i) {
