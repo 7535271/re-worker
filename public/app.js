@@ -821,6 +821,7 @@ function fullFlags(row, vals) {
 }
 /* every window's unusual days over the coin's whole history (computed once per coin) */
 const flagCache = new Map(); // coin → Promise<{ per, missing }>
+const flagReady = new Map(); // coin → { per, missing }, once read
 function flagData() {
   const coin = S.coin;
   if (flagCache.has(coin)) return flagCache.get(coin);
@@ -829,7 +830,9 @@ function flagData() {
     const got = {};
     await Promise.allSettled(rows.filter((r) => r.w).map((r) => loadSeries(r.w).then((s) => { got[r.w] = s; })));
     const per = rows.map((r) => { const vals = fullDaily(r, got); return { r, name: r.name(), vals, ...fullFlags(r, vals) }; });
-    return { per, missing: rows.filter((r) => r.w && !got[r.w]).map((r) => r.name()) };
+    const out = { per, missing: rows.filter((r) => r.w && !got[r.w]).map((r) => r.name()) };
+    flagReady.set(coin, out);
+    return out;
   })();
   p.catch(() => flagCache.delete(coin));
   flagCache.set(coin, p);
@@ -894,7 +897,7 @@ function checksInto(box, rep, repD) {
   }
 }
 /* ── Places that overlap (2026-09-28, Shu and Nova: one search, several observations — "the kamakura").
-   Behind it, every way runs with one fixed condition each; the day shows only where the overlaps are, in time order, unranked.
+   Behind it, every way runs with one fixed condition each; the day shows where the overlaps are, most overlap first, without the numbers.
    at 00:00  — where the market stood over the S.width days up to each day (default a week; the Observatory can change it). Nothing after either day.
    afterwards — the shape of the price from a little before to S.mv days after (a week). Hindsight.
    together  — the same set of windows jumped, on the day or the day after. Hindsight.
@@ -922,8 +925,38 @@ function placesNow() {
   if (pr) pr.results.forEach((r) => add("p", { ...r, pattern: pr.pattern }));
   if (S.q) momentsNow().filter((m) => m.day !== S.day).slice(0, 5).forEach((m) => add("w", { day: m.day, moment: m }));
   return [...map.values()]
-    .map((p) => { const kind = KIND_ORDER.find((k) => p.by[k]); return { ...p.by[kind], ...p, kind, later: Object.values(p.by).some((x) => x.later) }; })
-    .sort((a, b) => a.index - b.index);
+    .map((p) => { const kind = KIND_ORDER.find((k) => p.by[k]); return { ...p.by[kind], ...p, kind, later: Object.values(p.by).some((x) => x.later), overlap: overlapOf(p.day) }; })
+    .sort((a, b) => b.overlap - a.overlap || a.index - b.index);
+}
+/* how much two days overlap, for the order of places (2026-09-28, Shu: most overlap first; the number itself is not shown):
+   the mean of what "What overlapped?" shows for the pair — at 00:00, afterwards (an opposite shape counts as 0), and the share of your day's
+   jumping windows that also jumped there (once the windows have been read) */
+const overlapCache = new Map();
+function overlapOf(day) {
+  const fr = flagReady.get(S.coin);
+  const key = `${S.coin}|${S.day}|${day}|${S.mode}|${S.width}|${[...S.off].sort()}|${S.mv}|${fr ? 1 : 0}`;
+  if (overlapCache.has(key)) return overlapCache.get(key);
+  const axes = {};
+  for (const k of AXES) axes[k] = !S.off.has(k);
+  const pa = ex.pairAlike(S.day, day, { mode: S.mode, width: S.width, axes, span: S.mv });
+  const vals = [];
+  if (!pa.looked.error) vals.push(pa.looked.similarity);
+  if (!pa.moved.error) vals.push(Math.max(0, pa.moved.similarity));
+  if (fr) {
+    const i = dayNum(S.day) - ex.tl.d0, j = dayNum(day) - ex.tl.d0;
+    const a = fr.per.filter((q) => litAt(q, i) >= 0);
+    if (a.length) vals.push(a.filter((q) => litAt(q, j) >= 0).length / a.length);
+  }
+  const v = vals.length ? vals.reduce((x, y) => x + y, 0) / vals.length : 0;
+  overlapCache.set(key, v);
+  return v;
+}
+/* how far away a place is in time: "4 years earlier" */
+function howFar(day) {
+  const d = dayNum(day) - dayNum(S.day), n = Math.abs(d), side = d < 0 ? "earlier" : "later";
+  if (n >= 548) return `${Math.round(n / 365.25)} years ${side}`;
+  if (n >= 60) return `${Math.round(n / 30.44)} months ${side}`;
+  return `${n} day${n === 1 ? "" : "s"} ${side}`;
 }
 /* why a way found nothing for this day (nothing lining up is a result too) */
 function noneWhy() {
@@ -944,19 +977,15 @@ async function renderPlaces() {
   const draw = (looking) => {
     const list = placesNow();
     box.textContent = "";
-    const here = dayNum(S.day) - ex.tl.d0;
-    const hereRow = () => { const d = el("div", { class: "here" }); d.append(el("i"), textWithDates("span", {}, `${S.day} · you are here`)); return d; };
-    let placed = false;
     list.forEach((p, i) => {
-      if (!placed && p.index > here) { box.append(hereRow()); placed = true; }
       const b = el("button", { type: "button", class: "row place", style: `animation-delay:${i * 0.03}s`, "aria-label": `${p.day}: ${KIND_ORDER.filter((k) => p.by[k]).map((k) => kindTag(k, p.by[k])).join(", ")}` });
       const tags = el("span", { class: "tags" });
       for (const k of KIND_ORDER) if (p.by[k]) tags.append(el("span", { class: `tag k-${k}` }, kindTag(k, p.by[k])));
-      b.append(whenCell(p.day), el("span", { class: "chev", "aria-hidden": "true" }, "›"), tags);
+      b.append(whenCell(p.day), el("span", { class: "chev", "aria-hidden": "true" }, "›"), tags, el("span", { class: "hist far" }, howFar(p.day)));
       b.addEventListener("click", () => go({ view: "past", other: p.day, open: null, x: false }));
       box.append(b);
     });
-    if (!placed) box.append(hereRow());
+    if (!list.length) box.append(el("p", { class: "empty" }, "No other day overlapped with this one."));
     if (looking) box.append(el("p", { class: "empty" }, "Still looking through every window…"));
     note.textContent = "";
     const why = noneWhy();
@@ -1014,7 +1043,7 @@ function renderPast() {
   sub.textContent = "";
   const tags = el("span", { class: "tags" });
   for (const k of found) tags.append(el("span", { class: `tag k-${k}` }, kindTag(k, r.by[k])));
-  sub.append(tags, el("span", { class: "nth" }, list.length > 1 ? `place ${i + 1} of ${list.length}, in time order` : ""));
+  sub.append(tags, el("span", { class: "nth" }, `${howFar(r.day)}${list.length > 1 ? ` · place ${i + 1} of ${list.length}` : ""}`));
   const w = r.by.w, pp = r.by.p;
   $("p-what").textContent = w && w.moment.hn ? w.moment.hn.title
     : pp ? `${pp.same === pp.pattern.length ? "Every window moved the same way on both days." : `${pp.same} of ${pp.pattern.length} windows moved the same way on both days.`}${pp.extras.length ? ` Here, also: ${pp.extras.join(", ")}.` : ""}` : "";

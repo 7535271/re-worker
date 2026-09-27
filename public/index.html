@@ -450,6 +450,7 @@
   .rows.places .row.place { grid-template-columns: auto 1fr 14px; padding-top: 12px; padding-bottom: 12px; }
   .row.place .tags { grid-column: 2; grid-row: 1; justify-self: end; justify-content: flex-end; }
   .row.place .chev { grid-column: 3; grid-row: 1; }
+  .row.place .far { grid-column: 1 / -1; grid-row: 2; }
   .row-link .rl-t small span { font-size: inherit; color: inherit; line-height: inherit; }
   .tags { display: inline-flex; flex-wrap: wrap; gap: 5px; }
   .tag { display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--wash); box-shadow: 0 0 0 1px var(--ring); font-size: 11.5px; font-weight: 650; color: var(--ink-2); white-space: nowrap; }
@@ -612,10 +613,10 @@
       </div>
     </section>
 
-    <!-- the places in time that overlap with this day, in time order (2026-09-28, Shu and Nova) -->
+    <!-- the places in time that overlap with this day, most overlap first (2026-09-28, Shu and Nova) -->
     <section class="block" aria-label="Places that overlap">
       <h2>Places that overlap</h2>
-      <p class="lead">Other days that overlap with this one — at 00:00, afterwards, or in the windows that jumped. In time order.</p>
+      <p class="lead">Other days that overlap with this one — at 00:00, afterwards, or in the windows that jumped. The most overlap comes first.</p>
       <div id="s-places" class="rows places"></div>
       <p id="s-places-note" class="quiet"></p>
     </section>
@@ -744,7 +745,7 @@
 
     <section class="card explain">
       <h3>How frctlns finds overlaps</h3>
-      <p><strong>Places that overlap</strong>: for the day you stand on, frctlns looks in several ways at once and lists every day it found, in time order — not ranked. Each place carries a mark for the way it overlapped: <strong>at 00:00</strong> (the market stood alike), <strong>afterwards</strong> (the price moved in the same shape), <strong>N windows</strong> (the same windows jumped together), or the word you came with. Each way uses one fixed condition, written under “Why this pair?”. What each way found nothing for is said under the list.</p>
+      <p><strong>Places that overlap</strong>: for the day you stand on, frctlns looks in several ways at once and lists every day it found, the most overlap first: the mean of what “What overlapped?” shows for the pair (at 00:00, afterwards, and the share of your day's jumping windows that jumped there too). Each place carries a mark for the way it overlapped: <strong>at 00:00</strong> (the market stood alike), <strong>afterwards</strong> (the price moved in the same shape), <strong>N windows</strong> (the same windows jumped together), or the word you came with. Each way uses one fixed condition, written under “Why this pair?”. What each way found nothing for is said under the list.</p>
       <p><strong>Where it stood</strong> (STATE) puts each axis on a 0–1 scale: where it stood within its own past year, using only data up to that day. Price, market cap, volatility and the change figures use the past-year range; volume is compared on a log scale; Fear &amp; Greed is its 0–100 value. With less than 30 days of past an axis is absent.</p>
       <p><strong>How it moved</strong> (TRAJECTORY) compares how things moved inside the window, from its first day: price as % change, volume against the window's median (log), volatility as is, Fear &amp; Greed as points gained or lost. Each axis has a fixed scale, so a match does not depend on which other windows were searched.</p>
       <p><strong>Strict time</strong> (at 00:00): a past day only counts if its next 30 days had already happened by D, and nothing after D is used to find it. What came after is shown next to the pair, never used to choose it.</p>
