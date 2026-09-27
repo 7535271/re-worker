@@ -47,13 +47,28 @@ const AXES = [
 const MARKET_AXES = AXES.slice(0, 7); // quotes と OHLCV から来る軸
 
 /* ── 倉庫の設定 ── */
-const ARCHIVE_IDS = ["1"];      // 倉庫に置く資産（1 = 本物の Bitcoin）
+/* 倉庫に置く資産（CMC の id）。1 = 本物の Bitcoin。symbol では探さない（同じ記号の別物が混ざる）
+   from = その資産の日次が始まる年（それより前の年は CMC に聞かない）。2026-09-27 しゅう・ノヴァと5つに */
+const ASSETS = {
+  "1": { symbol: "BTC", name: "Bitcoin", wiki: "Bitcoin", from: 2013 },
+  "1027": { symbol: "ETH", name: "Ethereum", wiki: "Ethereum", from: 2015 },
+  "52": { symbol: "XRP", name: "XRP", wiki: "XRP_Ledger", from: 2013 },
+  "5426": { symbol: "SOL", name: "Solana", wiki: "Solana_(blockchain_platform)", from: 2020 },
+  "74": { symbol: "DOGE", name: "Dogecoin", wiki: "Dogecoin", from: 2013 },
+};
+const ARCHIVE_IDS = ["1", "1027", "52", "5426", "74"]; // この順に手をつける（Bitcoin が先）
+/* テストでは env.RE_ARCHIVE_IDS="1" のように絞れる（本番は設定しない） */
+const idsOf = (env) => (env && typeof env.RE_ARCHIVE_IDS === "string"
+  ? env.RE_ARCHIVE_IDS.split(",").map((x) => x.trim()).filter((x) => ARCHIVE_IDS.includes(x))
+  : ARCHIVE_IDS);
 const ARCHIVE_V = "v1";         // 箱の形を変えたら v2 にして作り直す
-const FIRST_YEAR = 2013;        // CMC の日次は 2013年4月から
+const FIRST_YEAR = 2013;        // 倉庫の一番古い年（資産ごとの始まりは ASSETS[id].from）
+const firstYearOf = (id) => Math.max(FIRST_YEAR, (ASSETS[id] && ASSETS[id].from) || FIRST_YEAR);
 const TAIL_DAYS = 10;           // 直近この日数は、値が後から届くことがあるので取り直す
 const REFRESH_EVERY_MIN = 55;   // cron: 直近の取り直しはこれより頻繁にしない
 const MANUAL_REFRESH_MIN = 10;  // /archive/step: 同上（連打しても無駄撃ちしない）
-const CRON = "5,35 * * * *";    // wrangler.toml と同じもの（表示用）
+const CRON = "*/5 * * * *";    // wrangler.toml と同じもの（表示用）。1回に1資産だけ進める（CPU 10ms の枠のため）
+const OBSERVE_MINUTES = [5, 9]; // F&G・公開時刻の観測は毎時 5〜9分と 35〜39分の回だけ（前と同じ間隔、KV の書き込みを増やさない）
 const TIMING_KEY = "fng-timing:v1";
 const MAX_LIVE = 1500;          // F&G latest の記録の上限（2日より古いものは 00:00 前後だけ残す）
 const MAX_FIRST_SEEN = 180;
@@ -436,7 +451,7 @@ function yearNeedsBuild(e, year, curYear, today, now) {
 }
 function missingYears(meta, curYear, today, now) {
   const list = [];
-  for (let y = curYear; y >= FIRST_YEAR; y--) {
+  for (let y = curYear; y >= firstYearOf(meta.id); y--) {
     if (yearNeedsBuild(meta.years[y], y, curYear, today, now)) list.push(y);
   }
   return list;
@@ -681,8 +696,8 @@ async function series(env, url) {
   const ns = env.RE_CACHE;
   const sp = url.searchParams;
   const id = sp.get("id") || "1";
-  if (!ARCHIVE_IDS.includes(id)) {
-    return out({ error: "this id is not in the archive", archived_ids: ARCHIVE_IDS }, 400);
+  if (!idsOf(env).includes(id)) {
+    return out({ error: "this id is not in the archive", archived_ids: idsOf(env) }, 400);
   }
   const yf = sp.get("from"), yt = sp.get("to");
   const problems = [];
@@ -729,15 +744,16 @@ async function archiveStatus(env) {
   const today = dayKey(iso(now));
   const curYear = Number(today.slice(0, 4));
   const archives = [];
-  for (const id of ARCHIVE_IDS) {
+  for (const id of idsOf(env)) {
     const meta = await kvJson(ns, metaKey(id));
     if (!meta) {
-      archives.push({ id, state: "empty so far — the cron fills it at :05 and :35 every hour, or open /archive/step" });
+      archives.push({ id, symbol: ASSETS[id].symbol, state: "empty so far — the cron fills it every 5 minutes (one asset at a time), or open /archive/step?id=" + id });
       continue;
     }
     const missing = missingYears(meta, curYear, today, now);
     archives.push({
       id,
+      symbol: ASSETS[id].symbol,
       complete: missing.length === 0,
       missing_years: missing,
       years: Object.keys(meta.years).map(Number).sort((a, b) => a - b).map((y) => {
@@ -1670,13 +1686,47 @@ function analyzePublication(log) {
   };
 }
 
-/* cron: 毎時 5分・35分。F&G の観測 → 倉庫の1歩 */
+/* いま一番手をつけるべき資産（無ければ null）:
+   ① 年がそろっていて、取り直しが遅れている資産（まだ一度も／日付が変わった／間隔の2倍以上たった）
+      → 他の資産を埋めている間も、そろった資産の新しい日を止めない
+   ② 足りない年がある資産 → ③ 取り直しの間隔が過ぎた資産（一番古いもの）
+   ①② は ARCHIVE_IDS の順（Bitcoin が先） */
+async function neediestId(env, now, mode = "cron") {
+  const ns = env.RE_CACHE;
+  const ids = idsOf(env);
+  const today = dayKey(iso(now));
+  const curYear = Number(today.slice(0, 4));
+  const metas = (await Promise.all(ids.map((id) => kvJson(ns, metaKey(id))))).map((m, i) => m || newMeta(ids[i]));
+  const gap = (mode === "manual" ? MANUAL_REFRESH_MIN : REFRESH_EVERY_MIN) * 60000;
+  const building = metas.map((m) => { if (!m.backoff) m.backoff = {}; return nextYear(m, curYear, today, now) !== null; });
+  const hasBoxes = metas.map((m) => Object.values(m.years || {}).some((e) => e && !e.empty));
+  for (let i = 0; i < ids.length; i++) {
+    if (building[i] || !hasBoxes[i]) continue;
+    const last = metas[i].last_refresh_at;
+    if (!last || last.slice(0, 10) < today || now - Date.parse(last) >= 2 * gap) return ids[i];
+  }
+  for (let i = 0; i < ids.length; i++) if (building[i]) return ids[i];
+  let best = null, bestAt = Infinity;
+  for (let i = 0; i < ids.length; i++) {
+    const at = Date.parse(metas[i].last_refresh_at);
+    if (now - at >= gap && at < bestAt) { best = ids[i]; bestAt = at; }
+  }
+  return best;
+}
+
+/* cron: 5分ごと。F&G・公開時刻の観測（毎時 5分台と35分台だけ）→ 倉庫の1歩（1回に1資産） */
 async function runCron(env, scheduledTime) {
   if (!env.CMC_KEY || !env.RE_CACHE) return;
-  try { await observeFng(env); } catch (e) { console.error("observeFng", e); }
-  try { await observePublication(env, scheduledTime || nowMs()); } catch (e) { console.error("observePublication", e); }
-  for (const id of ARCHIVE_IDS) {
-    try { await archiveStep(env, id, scheduledTime || nowMs(), "cron"); } catch (e) { console.error("archiveStep", id, e); }
+  const now = scheduledTime || nowMs();
+  const m = new Date(now).getUTCMinutes() % 30;
+  if (m >= OBSERVE_MINUTES[0] && m <= OBSERVE_MINUTES[1]) {
+    try { await observeFng(env); } catch (e) { console.error("observeFng", e); }
+    try { await observePublication(env, now); } catch (e) { console.error("observePublication", e); }
+  }
+  let id = null;
+  try { id = await neediestId(env, now); } catch (e) { console.error("neediestId", e); }
+  if (id) {
+    try { await archiveStep(env, id, now, "cron"); } catch (e) { console.error("archiveStep", id, e); }
   }
 }
 
@@ -1701,12 +1751,12 @@ export default {
           definition: DEFINITION,
           endpoints: [
             "/ — the app (public/index.html, public/app.js, public/engine.js)",
-            "/series?id=1 — every stored day for the asset, from the archive (no CMC call). Optional &from=2020&to=2024 (years)",
+            "/series?id=1 — every stored day for one asset, from the archive (no CMC call). ids: 1 BTC, 1027 ETH, 52 XRP, 5426 SOL, 74 DOGE. Optional &from=2020&to=2024 (years)",
             "/scene?day=YYYY-MM-DD — the same day through other windows: Wikipedia (en, ja), Hacker News, NASA APOD, earthquakes, ECB rates, the Bitcoin network, and a door to X search. window_time says, per window, when it is observed, published and revised, and how many days back it was visible at D 00:00 UTC (as_of_lag). Add &lat=&lon=&place= for the weather at one place",
             "/window-series?w=attention|tx|hash|weather — every day's value of one numeric window (Wikipedia 'Bitcoin' views, Bitcoin transactions, hash rate, or the weather at &lat=&lon=&place=), kept 6 hours. The value on a day is what happened that day; at D 00:00 UTC only D − as_of_lag was out",
             "/probe/published — when yesterday's Wikipedia, Bitcoin-network and weather values first appeared (measured by the cron, for the AS OF view)",
             "/archive/status — what the archive holds, what is missing, recent errors",
-            "/archive/step — do one unit of archive work now (build one missing year, or refresh the recent days)",
+            "/archive/step — do one unit of archive work now for one asset (build one missing year, or refresh the recent days). Optional &id=",
             "/state?id=1&start=YYYY-MM-DD&end=YYYY-MM-DD — MarketState for every day from start to end, live from CMC (start and end are required, both inclusive)",
             "/probe/btc, /probe/ohlcv — raw CMC responses (evidence)",
             "/probe/fng — every Fear & Greed page, with oldest/newest, missing and duplicate days (?raw=1 for every row)",
@@ -1755,8 +1805,11 @@ export default {
       if (p === "/archive/step") {
         if (!env.RE_CACHE) return out(noStorage(), 503);
         const now = nowMs();
-        const results = [];
-        for (const id of ARCHIVE_IDS) results.push(await archiveStep(env, id, now, "manual"));
+        // 1回に1資産（?id= で指定。無ければ一番手をつけるべき資産）。CPU の枠のため
+        const want = url.searchParams.get("id");
+        if (want !== null && !idsOf(env).includes(want)) return out({ error: "this id is not in the archive", archived_ids: idsOf(env) }, 400);
+        const id = want || (await neediestId(env, now, "manual")) || idsOf(env)[0];
+        const results = [await archiveStep(env, id, now, "manual")];
         return out({ results, see: "/archive/status" });
       }
 
