@@ -442,6 +442,32 @@
   .ptitle { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 22px !important; line-height: 1.2; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
   .ptitle i { display: inline-block; width: 10px; height: 10px; border-radius: 999px; margin-right: 6px; vertical-align: middle; }
   .ptitle .ar { color: var(--muted); font-weight: 600; }
+  /* the start's doors */
+  .row-link.door { margin-top: 16px; }
+  .door-h { margin: 26px 0 2px; font-size: 20px; }
+  .door-sub { margin: 0 0 10px; font-size: 13.5px; color: var(--muted); }
+  /* places that overlap: a time map, not a ranking */
+  .rows.places .row.place { grid-template-columns: auto 1fr 14px; padding-top: 12px; padding-bottom: 12px; }
+  .row.place .tags { grid-column: 2; grid-row: 1; justify-self: end; justify-content: flex-end; }
+  .row.place .chev { grid-column: 3; grid-row: 1; }
+  .row-link .rl-t small span { font-size: inherit; color: inherit; line-height: inherit; }
+  .tags { display: inline-flex; flex-wrap: wrap; gap: 5px; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--wash); box-shadow: 0 0 0 1px var(--ring); font-size: 11.5px; font-weight: 650; color: var(--ink-2); white-space: nowrap; }
+  .tag.k-p { background: var(--on-bg); color: var(--on-ink); box-shadow: none; }
+  .rows .here { display: flex; align-items: center; gap: 8px; padding: 9px 16px; border-top: 1px solid var(--grid); background: var(--wash); font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+  .rows .here:first-child { border-top: 0; }
+  .rows .here i { width: 9px; height: 9px; border-radius: 999px; background: var(--series-d); }
+  .day-head .sub .tags { margin-right: 8px; vertical-align: middle; }
+  .day-head .sub .nth { font-size: 12.5px; color: var(--muted); }
+  /* why this pair: the explanation is there, but it is not the way in */
+  .why-pair { margin: 0 0 18px; }
+  .why-pair summary { cursor: pointer; font-size: 14px; font-weight: 700; color: var(--ink-2); padding: 6px 2px; list-style: none; }
+  .why-pair summary::-webkit-details-marker { display: none; }
+  .why-pair summary::after { content: " ›"; color: var(--axis); }
+  .why-pair[open] summary::after { content: " ⌄"; }
+  .why-pair .conds { margin: 6px 0 10px; padding-left: 18px; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+  .why-pair .conds li.on { color: var(--ink); }
+  .why-pair .cmpk + .cmpk { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--grid); }
   .kinds-h { margin: 14px 0 0; font-size: 12px; font-weight: 600; color: var(--muted); }
   .kinds-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 6px 0 8px; }
   /* the same two days through each lens (2026-09-28, Shu and Nova) */
@@ -452,7 +478,7 @@
   .lens .ln { font-size: 13.5px; font-weight: 700; color: var(--ink); }
   .lens .lv { font-size: 14px; font-weight: 750; font-variant-numeric: tabular-nums; text-align: right; }
   .lens .ld { grid-column: 1 / -1; font-size: 12px; line-height: 1.35; color: var(--muted); }
-  .lens .lr.cur .ln::after { content: " · how this pair was found"; font-weight: 600; font-size: 11.5px; color: var(--muted); }
+  .lens .lr.cur .ln::after { content: " · found this place"; font-weight: 600; font-size: 11.5px; color: var(--muted); }
   .lens .lr.off .lv { color: var(--muted); font-weight: 600; }
   .kinds-seg button { border: 0; border-radius: 12px; padding: 9px 10px; background: var(--surface); box-shadow: 0 0 0 1px var(--ring); color: var(--ink-2); font: inherit; font-size: 13.5px; font-weight: 650; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
   .kinds-seg button small { display: block; margin-top: 1px; font-size: 11px; font-weight: 500; color: var(--muted); }
@@ -548,21 +574,12 @@
       <p class="lede">Find two moments in time that overlap. Look at both through the same windows, as each looked at 00:00, and at what came after each.</p>
     </section>
     <div id="coins" class="coins" role="group" aria-label="Which market"></div>
-    <div id="entry" class="seg entry" role="group" aria-label="Start from">
-      <button type="button" data-t="market">From the market</button>
-      <button type="button" data-t="world">From the world</button>
-    </div>
     <div id="status-home" aria-live="polite"></div>
+    <button id="pick-day" class="row-link door" type="button"><span class="rl-t">Any day<small>stand on a day of <span class="coin-sym">BTC</span>'s history</small></span> <span aria-hidden="true">›</span></button>
 
-    <section id="e-market" class="entrance" aria-label="From the market">
-      <div class="list-head"><h2>When things moved together</h2><span class="quiet-inline">found across all of history: the days when the most windows jumped at once — <span class="coin-sym">BTC</span>, attention, money, the world — each next to a day the same windows jumped again · hindsight</span></div>
-      <div id="t-rows" class="rows"></div>
-      <div class="list-head" style="margin-top:22px"><h2>When <span class="coin-sym">BTC</span> moved the most</h2><span class="quiet-inline">in one day, 00:00 to 00:00 UTC — each next to the day that moved most like it afterwards · hindsight</span></div>
-      <div id="m-rows" class="rows"></div>
-      <button id="pick-day" class="row-link" type="button">Or pick any day <span aria-hidden="true">›</span></button>
-    </section>
-
-    <section id="e-world" class="entrance" aria-label="From the world" hidden>
+    <section id="e-world" class="entrance" aria-label="The world">
+      <h2 class="door-h">The world</h2>
+      <p class="door-sub">A word, a topic or an event — the days it left traces.</p>
       <form id="ask" class="ask" role="search">
         <input id="q" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="40" placeholder="A word, a topic, an event" aria-label="A word, topic or event, in English">
         <button type="submit">Find</button>
@@ -594,11 +611,12 @@
       </div>
     </section>
 
-    <!-- where to go from here: four ways a day can be like this one (Nova, 2026-09-28: the pair is the centre, the day is a place to look deeper) -->
-    <section class="block" aria-label="Where do you want to go?">
-      <h2>Where do you want to go?</h2>
-      <p class="lead">Four ways another day can be like this one. Each opens the closest one side by side; step through the others there.</p>
-      <div id="s-kinds" class="rows kinds"></div>
+    <!-- the places in time that overlap with this day, in time order (2026-09-28, Shu and Nova) -->
+    <section class="block" aria-label="Places that overlap">
+      <h2>Places that overlap</h2>
+      <p class="lead">Other days that overlap with this one — at 00:00, afterwards, or in the windows that jumped. In time order.</p>
+      <div id="s-places" class="rows places"></div>
+      <p id="s-places-note" class="quiet"></p>
     </section>
 
     <button id="s-explore-link" class="row-link" type="button"><span class="rl-t">Explore this day<small>the windows at 00:00, what happened next, what moved with it</small></span> <span aria-hidden="true">›</span></button>
@@ -641,9 +659,6 @@
   <main id="v-past" class="screen" hidden aria-label="Two days side by side">
     <header class="day-head">
       <h1 id="p-title" class="ptitle"></h1>
-      <p class="kinds-h">Go to the closest day by</p>
-      <div id="p-kinds" class="kinds-seg" role="group" aria-label="Go to the closest day by"></div>
-      <div id="p-range" class="seg mini" role="group" aria-label="Compared over"></div>
       <p id="p-sub" class="sub"></p>
       <p id="p-what" class="what"></p>
       <p id="p-hist" class="hist"></p>
@@ -651,6 +666,11 @@
     </header>
 
     <div id="p-lens" class="lens" aria-live="polite"></div>
+    <details id="p-why" class="why-pair">
+      <summary>Why this pair?</summary>
+      <div id="p-cmp" class="pcmp"></div>
+    </details>
+
 
     <section class="block" aria-label="What happened next">
       <h2>What happened next?</h2>
@@ -665,10 +685,9 @@
       </div>
     </section>
 
-    <section class="block" aria-label="Was it really alike?">
-      <h2>Was it really alike?</h2>
-      <p id="p-lead" class="lead"></p>
-      <div id="p-cmp" class="pcmp"></div>
+    <section class="block" aria-label="Look around">
+      <h2>Look around</h2>
+      <p class="lead">Both days through the same windows, as each looked at 00:00 UTC — the ones that overlap most come first.</p>
       <div class="pairkey"><span><i style="background:var(--series-d)"></i><b id="k-d"></b> your day</span><span><i style="background:var(--series-sel)"></i><b id="k-p"></b> that day</span></div>
       <div id="p-tiles" class="tiles"></div>
       <div id="p-open" class="opened" aria-live="polite"></div>
@@ -723,18 +742,19 @@
     </section>
 
     <section class="card explain">
-      <h3>How frctlns measures “similar”</h3>
+      <h3>How frctlns finds overlaps</h3>
+      <p><strong>Places that overlap</strong>: for the day you stand on, frctlns looks in several ways at once and lists every day it found, in time order — not ranked. Each place carries a mark for the way it overlapped: <strong>at 00:00</strong> (the market stood alike), <strong>afterwards</strong> (the price moved in the same shape), <strong>N windows</strong> (the same windows jumped together), or the word you came with. Each way uses one fixed condition, written under “Why this pair?”. What each way found nothing for is said under the list.</p>
       <p><strong>Where it stood</strong> (STATE) puts each axis on a 0–1 scale: where it stood within its own past year, using only data up to that day. Price, market cap, volatility and the change figures use the past-year range; volume is compared on a log scale; Fear &amp; Greed is its 0–100 value. With less than 30 days of past an axis is absent.</p>
       <p><strong>How it moved</strong> (TRAJECTORY) compares how things moved inside the window, from its first day: price as % change, volume against the window's median (log), volatility as is, Fear &amp; Greed as points gained or lost. Each axis has a fixed scale, so a match does not depend on which other windows were searched.</p>
-      <p><strong>Strict time</strong> (Looked like this): a past day only counts if its next 30 days had already happened by D, and nothing after D is used to find it. What came after is shown next to the pair, never used to choose it.</p>
+      <p><strong>Strict time</strong> (at 00:00): a past day only counts if its next 30 days had already happened by D, and nothing after D is used to find it. What came after is shown next to the pair, never used to choose it.</p>
       <p><strong>Later in history</strong>: near the start of the archive there may be fewer than five such days. Only then, frctlns fills the list with days from after D, marked “later in history”. Their replays start after D's own next 30 days, so D's future still takes no part in finding them; what they show is hindsight.</p>
       <p><strong>Spacing</strong>: the look-alike days are at least 30 days apart, so one long stretch of the market is not shown five times. If several still come from the same season, that stretch really did last.</p>
       <p><strong>Short and incomplete history</strong>: a day in the archive's first year has less than a year behind it (short history); a later day can have gaps in its past year (incomplete history). Both stay in the list, marked with how many days were there to compare.</p>
       <p>Only axes present on both sides are compared; their weights are shared out again. A past day is compared only if at least half of D's axes (by weight) can be compared there — the ones left out are counted, not hidden.</p>
-      <p><strong>Moved like this afterwards</strong> (hindsight) is the other kind of alike: not where the market stood, but how it moved. It compares the shape of the price from a little before the day to 3 days, a week or a month after it, with every other day in the archive, earlier or later. Only the shape counts — a move a third of the size, or one that took half or twice as long, can still match — and each result shows how much it really moved. It uses what happened after the day, so it is marked hindsight.</p>
-      <p><strong>When things moved together</strong> (on the first screen) looks across the whole archive for the days when the most windows were unusual at once, on the day or the day after. <strong>Moved together</strong> takes the set of windows that jumped on your day, and looks for the other days when all of them jumped again — the same windows, whichever way they went; the directions are shown, not required.</p>
+      <p><strong>Afterwards</strong> (hindsight) is not where the market stood, but how it moved. It compares the shape of the price from a little before the day to a week after it, with every other day in the archive, earlier or later. Only the shape counts — a move a third of the size, or one that took half or twice as long, can still match — and each result shows how much it really moved. It uses what happened after the day, so it is marked hindsight.</p>
+      <p><strong>Together</strong> (hindsight) takes the set of windows that made an unusual jump on your day or the day after, and looks across the whole archive for the other days when all of them jumped again — the same windows, whichever way they went; the directions are shown, not required.</p>
       <p><strong>What moved with it?</strong> (hindsight) lays the same 38 days — a week before the day to a month after — under each other, one line per window: the coin's price, Fear &amp; Greed and the Bitcoin network; the coin on Wikipedia and on Hacker News; Nasdaq, VIX and the US dollar (FRED); and all of English Wikipedia. Each line is scaled to its own range. A dot marks a day that was unusual for that window: a change at least three times its usual day-to-day change over the year before (for Hacker News, at least three times the month's usual count). frctlns does not say what caused what. Some windows move together, some later, some not at all — and nothing lining up is a result too.</p>
-      <p><strong>The windows of a pair</strong> are ordered by how alike the two days look through each one: 1 − the mean gap between their places within each one's own past year (for the market, every part of it). Headlines, pictures and the X door have no number, so they come after.</p>
+      <p><strong>What overlapped?</strong> measures the pair every way, with the same conditions, whichever way found it. <strong>The windows of a pair</strong> are ordered by how alike the two days look through each one: 1 − the mean gap between their places within each one's own past year (for the market, every part of it). Headlines, pictures and the X door have no number, so they come after.</p>
       <p><strong>Fear &amp; Greed</strong> is CMC's index for the whole crypto market. It is the same for every coin: on an ETH day it tells the mood of the market around ETH, not ETH's own.</p>
       <p><strong>Other windows</strong> (Wikipedia, weather, the Bitcoin network and the rest) never change which days are found. They only show how that day looked from somewhere else, using what had come out by 00:00 UTC of each day. Attention follows the coin you chose (its English Wikipedia article); the Bitcoin network is Bitcoin's own chain, shown for every coin.</p>
       <p><strong>From the world</strong>: a word, topic or event finds the days it left public traces — the day its English Wikipedia article was read far more than usual (from 2015-07-01), or the day a Hacker News story with the word in its title got its most points (from 2013). These are attention traces found with today's records, not an event detector. Through the windows, each day shows what had come out by its 00:00 UTC; the day itself is shown after that, as recorded now.</p>
