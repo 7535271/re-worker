@@ -65,7 +65,9 @@ const ARCHIVE_V = "v1";         // 箱の形を変えたら v2 にして作り�
 const FIRST_YEAR = 2013;        // 倉庫の一番古い年（資産ごとの始まりは ASSETS[id].from）
 const firstYearOf = (id) => Math.max(FIRST_YEAR, (ASSETS[id] && ASSETS[id].from) || FIRST_YEAR);
 const TAIL_DAYS = 10;           // 直近この日数は、値が後から届くことがあるので取り直す
-const REFRESH_EVERY_MIN = 55;   // cron: 直近の取り直しはこれより頻繁にしない
+const REFRESH_EVERY_MIN = 55;   // cron: 直近の取り直しはこれより頻繁にしない（Bitcoin）
+const REFRESH_OTHER_MIN = 175;  // Bitcoin 以外は3時間に1回（無料枠の KV 書き込み 1日1,000回を守る）
+const refreshMinOf = (id, mode) => (mode === "manual" ? MANUAL_REFRESH_MIN : id === "1" ? REFRESH_EVERY_MIN : REFRESH_OTHER_MIN);
 const MANUAL_REFRESH_MIN = 10;  // /archive/step: 同上（連打しても無駄撃ちしない）
 const CRON = "*/5 * * * *";    // wrangler.toml と同じもの（表示用）。1回に1資産だけ進める（CPU 10ms の枠のため）
 const OBSERVE_MINUTES = [5, 9]; // F&G・公開時刻の観測は毎時 5〜9分と 35〜39分の回だけ（前と同じ間隔、KV の書き込みを増やさない）
@@ -670,7 +672,7 @@ async function archiveStep(env, id, now, mode) {
     r = await buildYear(env, ns, meta, id, y, today, now);
   } else {
     // 日付が変わって最初の1回は必ず取り直す（新しい日の 00:00 を早く倉庫に入れる）
-    const gap = (mode === "manual" ? MANUAL_REFRESH_MIN : REFRESH_EVERY_MIN) * 60000;
+    const gap = refreshMinOf(id, mode) * 60000;
     const last = meta.last_refresh_at ? Date.parse(meta.last_refresh_at) : 0;
     const newDay = !meta.last_refresh_at || meta.last_refresh_at.slice(0, 10) < today;
     if (!newDay && now - last < gap) {
@@ -738,7 +740,7 @@ async function series(env, url) {
   });
 }
 
-async function archiveStatus(env) {
+async function archiveStatus(env, url) {
   const ns = env.RE_CACHE;
   const now = nowMs();
   const today = dayKey(iso(now));
@@ -774,12 +776,24 @@ async function archiveStatus(env) {
   return {
     storage: "connected",
     cron: CRON,
+    ...(await writeProbe(ns, url)),
     archives,
     fng_timing: log
       ? { since: log.started_at, live_readings: log.live.length, days_seen: Object.keys(log.first_seen).length,
           revisions: log.revisions.length, last_error: log.errors[0] || null, details: "/probe/fng-timing" }
       : "no readings yet (the cron writes the first one)",
   };
+}
+
+/* ?write=1: KV にまだ書けるか（無料枠は1日1,000回。使い切ると 00:00 UTC まで書けない）。1回ぶん使う */
+async function writeProbe(ns, url) {
+  if (!url || url.searchParams.get("write") !== "1") return {};
+  try {
+    await ns.put("probe:write", iso(nowMs()), { expirationTtl: 3600 });
+    return { kv_write: "ok" };
+  } catch (e) {
+    return { kv_write: `failed: ${String(e && e.message ? e.message : e).slice(0, 200)}` };
+  }
 }
 
 /* ──────────────────────────────────────────
@@ -1826,19 +1840,19 @@ async function neediestId(env, now, mode = "cron") {
   const today = dayKey(iso(now));
   const curYear = Number(today.slice(0, 4));
   const metas = (await Promise.all(ids.map((id) => kvJson(ns, metaKey(id))))).map((m, i) => m || newMeta(ids[i]));
-  const gap = (mode === "manual" ? MANUAL_REFRESH_MIN : REFRESH_EVERY_MIN) * 60000;
+  const gapOf = (id) => refreshMinOf(id, mode) * 60000;
   const building = metas.map((m) => { if (!m.backoff) m.backoff = {}; return nextYear(m, curYear, today, now) !== null; });
   const hasBoxes = metas.map((m) => Object.values(m.years || {}).some((e) => e && !e.empty));
   for (let i = 0; i < ids.length; i++) {
     if (building[i] || !hasBoxes[i]) continue;
     const last = metas[i].last_refresh_at;
-    if (!last || last.slice(0, 10) < today || now - Date.parse(last) >= 2 * gap) return ids[i];
+    if (!last || last.slice(0, 10) < today || now - Date.parse(last) >= 2 * gapOf(ids[i])) return ids[i];
   }
   for (let i = 0; i < ids.length; i++) if (building[i]) return ids[i];
   let best = null, bestAt = Infinity;
   for (let i = 0; i < ids.length; i++) {
     const at = Date.parse(metas[i].last_refresh_at);
-    if (now - at >= gap && at < bestAt) { best = ids[i]; bestAt = at; }
+    if (now - at >= gapOf(ids[i]) && at < bestAt) { best = ids[i]; bestAt = at; }
   }
   return best;
 }
@@ -1926,7 +1940,7 @@ export default {
         if (!env.RE_CACHE) return out(noStorage(), 503);
         if (p === "/probe/published") return out(analyzePublication(await kvJson(env.RE_CACHE, PUB_KEY)));
         if (p === "/series") return await series(env, url);
-        if (p === "/archive/status") return out(await archiveStatus(env));
+        if (p === "/archive/status") return out(await archiveStatus(env, url));
         return out(analyzeTiming(await kvJson(env.RE_CACHE, TIMING_KEY)));
       }
 
