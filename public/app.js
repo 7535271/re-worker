@@ -250,7 +250,7 @@ function setupControls() {
   $("next-day").addEventListener("click", () => stepDay(1));
   $("latest").addEventListener("click", () => setDay(ex.last));
   $("random").addEventListener("click", () => standOn(randomDay()));
-  for (const id of ["how-link", "how-link2"]) $(id).addEventListener("click", () => go({ view: "how", open: null }));
+  $("how-link2").addEventListener("click", () => go({ view: "how", open: null }));
   $("p-prev").addEventListener("click", () => stepPair(-1));
   $("p-next").addEventListener("click", () => stepPair(1));
   $("stand").addEventListener("click", exploreThere);
