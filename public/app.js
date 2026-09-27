@@ -1,4 +1,4 @@
-/* RE: — the page. Reads /series once per coin, then every observation is computed here in the browser.
+/* frctlns — the page. Reads /series once per coin, then every observation is computed here in the browser.
    Rearranged 2026-09-27 (Shu, Nova): the centre is a moment in time. Two ways in —
    from the world (a word: when was it happening?) and from the market (when did it move the most?) —
    then the same walk: stand on the day → look through the windows at 00:00 → open what happened next →
@@ -21,7 +21,7 @@ const MODE_HINT = {
   TRAJECTORY: "How price, volume, volatility and Fear & Greed moved inside the window, from its first day (TRAJECTORY).",
 };
 
-/* the markets RE: keeps (CMC ids). Attention follows the coin's own English Wikipedia article */
+/* the markets frctlns keeps (CMC ids). Attention follows the coin's own English Wikipedia article */
 const COINS = [
   { id: "1", sym: "BTC", name: "Bitcoin", x: "bitcoin", wiki: "Bitcoin" },
   { id: "1027", sym: "ETH", name: "Ethereum", x: "ethereum", wiki: "Ethereum" },
@@ -188,6 +188,7 @@ async function boot() {
     }
   }
   if (S.q) await refreshMoments(); // a shared link to two moments of a word opens on them
+  if (S.view === "past" && S.pk === "p") { try { await patternFor(S.day); } catch { /* falls back to the day */ } }
   setupControls();
   renderFooter();
   run(false);
@@ -401,7 +402,7 @@ async function renderWorld() {
     title.textContent = "";
     found.textContent = "";
     rows.hidden = true;
-    how.textContent = "Enter a word, topic, or event. RE: finds the days it left traces in the world — in what people read on Wikipedia and voted up on Hacker News.";
+    how.textContent = "Enter a word, topic, or event. frctlns finds the days it left traces in the world — in what people read on Wikipedia and voted up on Hacker News.";
     return;
   }
   const token = ++worldToken;
@@ -538,6 +539,7 @@ function renderStand() {
   $("s-next").hidden = !open;
   if (open) drawOwn(false);
   renderMoves();
+  renderPatternList();
   renderGoMoments();
   renderSimilar();
 }
@@ -547,6 +549,7 @@ function openOwn() {
   $("s-next").hidden = false;
   drawOwn(true);
   renderMoves();
+  renderPatternList();
 }
 /* moved like this afterwards: the shape of the move after the day (hindsight — it opens with what happened next) */
 const movesCacheDay = new Map();
@@ -597,7 +600,7 @@ function drawOwn(animate) {
 /* ── Moved together? (hindsight): the same 38 days, one line per window, stacked so they can be read down a column.
    A dot = an unusual day for that window: a change ≥ 3× its usual day-to-day change over the year before
    (robust: 1.4826 × the median absolute change). Hacker News counts: ≥ 3× the month's median and ≥ 5.
-   RE: does not say what caused what — together, later, or not at all are all results (Nova, 2026-09-28) ── */
+   frctlns does not say what caused what — together, later, or not at all are all results (Nova, 2026-09-28) ── */
 const MT_BEFORE = 7, MT_AFTER = 30;
 const TOGETHER = [
   { group: "Crypto" },
@@ -809,7 +812,7 @@ function drawTogether(day0, got, status) {
 }
 
 /* ── When things moved together (hindsight): over the coin's whole history, the days when the most windows were unusual at once.
-   RE: does not choose which windows should go together — it counts, and shows which ones did (Nova, 2026-09-28).
+   frctlns does not choose which windows should go together — it counts, and shows which ones did (Nova, 2026-09-28).
    Hacker News counts are left out here (they can only be read a month at a time). ── */
 function fullDaily(row, got) {
   const tl = ex.tl, n = tl.n;
@@ -856,15 +859,30 @@ function fullFlags(row, vals) {
   }
   return { flags, z };
 }
-const togetherCache = new Map(); // coin → Promise<days>
-function togetherDays() {
+/* every window's unusual days over the coin's whole history (computed once per coin) */
+const flagCache = new Map(); // coin → Promise<{ per, missing }>
+function flagData() {
   const coin = S.coin;
-  if (togetherCache.has(coin)) return togetherCache.get(coin);
+  if (flagCache.has(coin)) return flagCache.get(coin);
   const p = (async () => {
     const rows = TOGETHER.filter((r) => r.k && r.k !== "hn");
     const got = {};
     await Promise.allSettled(rows.filter((r) => r.w).map((r) => loadSeries(r.w).then((s) => { got[r.w] = s; })));
     const per = rows.map((r) => { const vals = fullDaily(r, got); return { r, name: r.name(), vals, ...fullFlags(r, vals) }; });
+    return { per, missing: rows.filter((r) => r.w && !got[r.w]).map((r) => r.name()) };
+  })();
+  p.catch(() => flagCache.delete(coin));
+  flagCache.set(coin, p);
+  return p;
+}
+/* a window counts for a day if it was unusual that day or the next (some windows answer a day late) */
+const litAt = (q, j) => (q.flags[j] ? j : q.flags[j + 1] ? j + 1 : -1);
+const togetherCache = new Map(); // coin → Promise<days>
+function togetherDays() {
+  const coin = S.coin;
+  if (togetherCache.has(coin)) return togetherCache.get(coin);
+  const p = (async () => {
+    const { per, missing } = await flagData();
     const n = ex.tl.n;
     const found = [];
     for (let i = 0; i + 1 < n; i++) {
@@ -873,7 +891,7 @@ function togetherDays() {
       for (const q of per) {
         if (q.vals[i] === null && q.vals[i + 1] === null) continue;
         avail++;
-        const f = q.flags[i] ? i : q.flags[i + 1] ? i + 1 : -1; // a window may answer a day late
+        const f = litAt(q, i);
         if (f >= 0) { hit.push(q); score += Math.min(q.z[f], 12); }
       }
       if (avail >= 4 && hit.length >= 2) found.push({ i, day: ymdOf(ex.tl.d0 + i), count: hit.length, avail, names: hit.map((q) => q.name), price: hit.some((q) => q.r.k === "price"), score });
@@ -884,12 +902,87 @@ function togetherDays() {
       if (out.every((o) => Math.abs(o.i - f.i) >= 14)) out.push(f);
       if (out.length === 8) break;
     }
-    return { days: out, missing: rows.filter((r) => r.w && !got[r.w]).map((r) => r.name()) };
+    return { days: out, missing };
   })();
   p.catch(() => togetherCache.delete(coin));
   togetherCache.set(coin, p);
   return p;
 }
+/* ── Same windows moved together (hindsight): the set of windows that jumped at once on a day, looked for on every other day.
+   Only which windows — not which way (Nova, 2026-09-28): the directions are shown, so a match in direction is something you notice. ── */
+const patternCache = new Map(); // "coin|day" → { pattern, results }
+const patternKey = (day) => `${S.coin}|${day}`;
+async function patternFor(day) {
+  const key = patternKey(day);
+  if (patternCache.has(key)) return patternCache.get(key);
+  const { per } = await flagData();
+  const i = dayNum(day) - ex.tl.d0;
+  const pattern = [];
+  per.forEach((q, k) => { const f = litAt(q, i); if (f >= 0) pattern.push({ k, name: q.name, dir: q.flags[f] }); });
+  const out = { pattern, results: [] };
+  if (pattern.length >= 2) {
+    const found = [];
+    for (let j = 0; j + 1 < ex.tl.n; j++) {
+      if (Math.abs(j - i) < 14) continue;
+      let ok = true, score = 0;
+      const dirs = [];
+      for (const pt of pattern) {
+        const q = per[pt.k], f = litAt(q, j);
+        if (f < 0) { ok = false; break; }
+        dirs.push(q.flags[f]);
+        score += Math.min(q.z[f], 12);
+      }
+      if (!ok) continue;
+      const extras = per.filter((q, k) => !pattern.some((pt) => pt.k === k) && litAt(q, j) >= 0).map((q) => q.name);
+      found.push({ index: j, day: ymdOf(ex.tl.d0 + j), dirs, extras, same: dirs.filter((d, x) => d === pattern[x].dir).length, score, later: j > i });
+    }
+    found.sort((a, b) => a.extras.length - b.extras.length || b.score - a.score);
+    for (const f of found) {
+      if (out.results.every((o) => Math.abs(o.index - f.index) >= 14)) out.results.push(f);
+      if (out.results.length === 8) break;
+    }
+  }
+  patternCache.set(key, out);
+  return out;
+}
+const arrow = (d) => (d > 0 ? "↑" : "↓");
+const patternText = (pattern, dirs) => pattern.map((pt, x) => `${pt.name} ${arrow(dirs ? dirs[x] : pt.dir)}`).join(" · ");
+let patternToken = 0;
+async function renderPatternList() {
+  const wrap = $("s-pattern-wrap");
+  const open = ownOpen.has(ownKey());
+  wrap.hidden = !open;
+  if (!open) return;
+  const token = ++patternToken;
+  const box = $("s-pattern"), sub = $("s-pattern-sub");
+  box.textContent = "";
+  sub.textContent = "";
+  box.append(el("p", { class: "empty" }, "Looking through every day…"));
+  let pr;
+  try { pr = await patternFor(S.day); } catch (e) {
+    if (token !== patternToken) return;
+    box.textContent = "";
+    box.append(el("p", { class: "empty" }, `Could not be looked for this time (${e.message}).`));
+    return;
+  }
+  if (token !== patternToken || S.view !== "stand") return;
+  box.textContent = "";
+  if (pr.pattern.length < 2) {
+    sub.textContent = "which windows jumped at once on this day · hindsight";
+    box.append(el("p", { class: "empty" }, pr.pattern.length ? `Only ${pr.pattern[0].name} jumped on this day — no pattern to look for.` : "No window jumped on this day — no pattern to look for."));
+    return;
+  }
+  sub.textContent = `${patternText(pr.pattern)} — all of them again, on another day · hindsight`;
+  if (!pr.results.length) { box.append(el("p", { class: "empty" }, "This set of windows never jumped together again.")); return; }
+  pr.results.forEach((f, i) => {
+    const b = el("button", { type: "button", class: "row", style: `animation-delay:${i * 0.03}s`, "aria-label": `${f.day}, the same ${pr.pattern.length} windows` });
+    b.append(whenCell(f.day), el("span", { class: "go" }, f.extras.length ? `all ${pr.pattern.length} +${f.extras.length}` : `all ${pr.pattern.length}`), el("span", { class: "chev", "aria-hidden": "true" }, "›"));
+    b.append(el("span", { class: "hist" }, `${patternText(pr.pattern, f.dirs)} · ${f.same === pr.pattern.length ? "every one the same way" : `${f.same} of ${pr.pattern.length} the same way`} · ${f.later ? "later in history" : "earlier"}`));
+    b.addEventListener("click", () => go({ view: "past", pk: "p", other: f.day, open: null }));
+    box.append(b);
+  });
+}
+
 let togetherToken = 0;
 async function renderTogetherList() {
   const box = $("t-rows");
@@ -977,6 +1070,10 @@ function renderSimilar() {
 /* the days you can step between: the market's look-alikes, or the other moments of the word */
 function pairList() {
   if (S.pk === "v") return movesNow().results.map((r, i) => ({ ...r, kind: "v", rank: i }));
+  if (S.pk === "p") {
+    const pr = patternCache.get(patternKey(S.day));
+    return pr ? pr.results.map((r, i) => ({ ...r, kind: "p", rank: i, pattern: pr.pattern })) : [];
+  }
   if (S.pk === "w") {
     return momentsNow().filter((m) => m.day !== S.day).map((m, i) => ({ day: m.day, index: dayNum(m.day) - ex.tl.d0, kind: "w", moment: m, rank: i }));
   }
@@ -994,7 +1091,7 @@ function stepPair(k) {
 }
 /* a later day (filled in when the past is short) is after D: its replay is hindsight, so it may run to the archive's end.
    A moment of a word is chosen with today's records, so it too is shown to the archive's end */
-const limitFor = (r) => (r && (r.later || r.kind === "w" || r.kind === "v") ? ex.last : S.day);
+const limitFor = (r) => (r && (r.later || r.kind === "w" || r.kind === "v" || r.kind === "p") ? ex.last : S.day);
 const revealed = new Set(); // "coin|D|that day" pairs whose "next" has been opened in this visit
 function standThere() {
   const r = pairNow();
@@ -1014,16 +1111,19 @@ function renderPast() {
   setDated($("p-sub"), r.kind === "w"
     ? `Another moment of “${S.q}”, next to ${S.day}.`
     : r.kind === "v" ? `Moved like ${S.day} afterwards (hindsight).`
+    : r.kind === "p" ? `The same windows jumped at once, as on ${S.day} (hindsight).`
     : r.later ? `Later in history. The market says this day felt like ${S.day}.` : `The market says this day felt like ${S.day}.`);
   const q = r.kind === "v" ? movesNow().query : null;
   $("p-what").textContent = r.kind === "w" && r.moment.hn ? r.moment.hn.title
-    : q ? `${sym()} ${pct(r.move)} in ${r.days} days here · ${pct(q.move)} in ${q.days} days on your day` : "";
+    : q ? `${sym()} ${pct(r.move)} in ${r.days} days here · ${pct(q.move)} in ${q.days} days on your day`
+    : r.kind === "p" ? `${r.same === r.pattern.length ? "Every window moved the same way on both days." : `${r.same} of ${r.pattern.length} windows moved the same way on both days.`}${r.extras.length ? ` Here, also: ${r.extras.join(", ")}.` : ""}` : "";
   $("p-hist").textContent = histTag(r.coverage_days && r.coverage_days.candidate, r.day) || "";
   $("p-prev").disabled = i <= 0;
   $("p-next").disabled = i >= list.length - 1;
   $("p-lead").textContent = r.kind === "w"
     ? "Two moments of the same word. Look at both through the same windows, as each looked at 00:00 UTC."
     : r.kind === "v" ? "The market moved the same way after these two days. Look at both through the same windows, as each looked at 00:00 UTC — what was around each?"
+    : r.kind === "p" ? "The same windows jumped at once on both days. Look at both through the same windows, as each looked at 00:00 UTC — what was around each?"
     : "The market says these two days felt the same. Look at both through the same windows, as each looked at 00:00 UTC.";
   $("k-d").textContent = S.day;
   $("k-p").textContent = r.day;
@@ -1032,7 +1132,7 @@ function renderPast() {
   // what happened next stays sealed until it is opened
   const open = revealed.has(`${S.coin}|${S.day}|${r.day}`);
   $("open-next").hidden = open;
-  $("seal-note").textContent = r.kind === "w" || r.kind === "v" || r.later
+  $("seal-note").textContent = r.kind === "w" || r.kind === "v" || r.kind === "p" || r.later
     ? `the ${HORIZON} days after ${r.day}`
     : `the ${HORIZON} days after ${r.day} — the part nobody on ${S.day} could see for their own day`;
   $("next-body").hidden = !open;
@@ -1050,7 +1150,7 @@ function openNext() {
 }
 function drawNext(r, animate) {
   // your own day: its line goes on only if you have opened its future yourself
-  const mine = ownOpen.has(ownKey()) || r.kind === "v"; // a move-alike is found from your day's future, so it is already open
+  const mine = ownOpen.has(ownKey()) || r.kind === "v" || r.kind === "p"; // found from your day's future, so it is already open
   const D = ex.replay(S.day, mine ? ex.last : S.day);
   const selRep = ex.replay(r.day, limitFor(r));
   checksInto($("checks"), selRep);
@@ -1064,10 +1164,10 @@ function drawNext(r, animate) {
   lg.textContent = "";
   const key = (color, text) => { const s = el("span"); s.append(el("i", { style: `background:var(${color})` }), document.createTextNode(text)); return s; };
   lg.append(key("--series-sel", `${r.day} (that day)`), key("--series-d", `${S.day} (your day)`));
-  if (series.some((s) => s.kind === "context")) lg.append(key("--context", r.kind === "w" ? `the other moments of “${S.q}”` : r.kind === "v" ? "the other moves like it" : "the other similar days"));
+  if (series.some((s) => s.kind === "context")) lg.append(key("--context", r.kind === "w" ? `the other moments of “${S.q}”` : r.kind === "v" ? "the other moves like it" : r.kind === "p" ? "the other days with this pattern" : "the other similar days"));
   drawChart(v);
   v.animate = false;
-  $("p-hidden").textContent = r.kind === "v"
+  $("p-hidden").textContent = r.kind === "p" ? "Both lines go on: this pair was found with hindsight." : r.kind === "v"
     ? (r.stretch !== 1 ? `This move took ${r.stretch < 1 ? "about half as long" : "about twice as long"} as yours — the chart shows both on the same days, so the shapes line up only roughly here.` : "Both lines go on: this pair was found with hindsight.")
     : mine
     ? `You opened what came after ${S.day} yourself, so both lines go on.`
@@ -1075,7 +1175,7 @@ function drawNext(r, animate) {
 }
 
 /* ── what was compared: the two ranges of days, drawn as two lines on the same axis ──
-   Looked alike (STATE): the price's place within its own past year, day by day (RE: compares every part of the market; the price stands for them here).
+   Looked alike (STATE): the price's place within its own past year, day by day (frctlns compares every part of the market; the price stands for them here).
    Looked alike (TRAJECTORY): the price path from the window's first day.
    Moved alike: the shape of the price, each line on its own scale (the other day stretched to the same length) */
 function comparedOf(r) {
@@ -1083,6 +1183,7 @@ function comparedOf(r) {
   const q = dayNum(S.day) - tl.d0, c = r.index;
   const day = (i) => ymdOf(tl.d0 + i);
   if (r.kind === "w") return { title: `Found by the word “${S.q}”, not by the market — nothing was compared.`, lines: null };
+  if (r.kind === "p") return { title: "Compared: which windows jumped at once (a day's change at least 3× that window's usual), on the day or the day after — not the shape of the market.", lines: null, table: r.pattern.map((pt, x) => [pt.name, arrow(pt.dir), arrow(r.dirs[x])]) };
   if (r.kind === "v") {
     const m = movesNow();
     const k = r.stretch;
@@ -1127,7 +1228,7 @@ function comparedOf(r) {
     lines: [line(q), line(c)],
     mark: 1,
     axis: [`${MINUS}${w - 1}d`, "", "the day"],
-    note: traj ? "The price's change from the first day of each range (RE: also compares volume, volatility and Fear & Greed)." : "The price's place within its own past year: 0 = its lowest, 1 = its highest (RE: compares every part of the market this way; the price stands for them here).",
+    note: traj ? "The price's change from the first day of each range (frctlns also compares volume, volatility and Fear & Greed)." : "The price's place within its own past year: 0 = its lowest, 1 = its highest (frctlns compares every part of the market this way; the price stands for them here).",
     fixed01: !traj,
   };
 }
@@ -1144,6 +1245,13 @@ function renderCompared(r) {
       rr.append(sp);
     });
     box.append(rr);
+  }
+  if (cmp.table) {
+    const t = el("div", { class: "ptab" });
+    t.append(el("span", {}, ""), el("span", { class: "h" }, "your day"), el("span", { class: "h" }, "that day"));
+    for (const [name, a, b] of cmp.table) t.append(el("span", { class: "n2" }, name), el("span", { class: `d${a === b ? " same" : ""}`, style: "color:var(--series-d)" }, a), el("span", { class: `d${a === b ? " same" : ""}`, style: "color:var(--series-sel)" }, b));
+    box.append(t, el("p", { class: "n" }, "↑ went up that day, ↓ went down. frctlns looked only for the same windows, not the same directions."));
+    return;
   }
   if (!cmp.lines) return;
   const W = Math.max(280, Math.round(box.getBoundingClientRect().width) - 24 || 330), H = 96;
@@ -1171,7 +1279,7 @@ function renderCompared(r) {
   box.append(root, el("p", { class: "n" }, cmp.note));
 }
 
-/* both days through the same windows, each as it looked at its own 00:00 UTC. RE: does not grade them */
+/* both days through the same windows, each as it looked at its own 00:00 UTC. frctlns does not grade them */
 const PAIR = [
   { k: "market", name: "Market" }, { k: "attention", name: "Attention" }, { k: "weather", name: "Weather" },
   { k: "network", name: "Bitcoin network" }, { k: "hn", name: "Hacker News" }, { k: "sky", name: "Sky" },
@@ -1309,7 +1417,7 @@ function sideBody(k, get, idx, comps, day) {
   }
   return { nodes, shows };
 }
-/* X is a door: a search for the coin's name on one UTC day (RE: reads nothing from X) */
+/* X is a door: a search for the coin's name on one UTC day (frctlns reads nothing from X) */
 function xUrl(day) {
   const q = `${coinNow().x} since:${day} until:${ymdOf(dayNum(day) + 1)}`;
   return `https://x.com/search?q=${encodeURIComponent(q)}&src=typed_query&f=top`;
@@ -1668,7 +1776,7 @@ const VALUE_STATUS = { as_published: "as published", current: "today's value", r
 function timeDetails(time, flat = false) {
   const d = el(flat ? "div" : "details", { class: "times" });
   if (!flat) d.append(el("summary", {}, "When each window knew what"));
-  d.append(el("p", {}, "A date on a window is not the moment the world could see it. Each window shows the times it has — when it happened, when it could be seen, when the data came out, whether it changes later. At 00:00 RE: uses only what had come out by then."));
+  d.append(el("p", {}, "A date on a window is not the moment the world could see it. Each window shows the times it has — when it happened, when it could be seen, when the data came out, whether it changes later. At 00:00 frctlns uses only what had come out by then."));
   for (const k of Object.keys(WINDOW_NAMES)) {
     const t = time[k];
     if (!t) continue;
@@ -2019,7 +2127,8 @@ function renderFooter() {
   for (const id of ["footer", "footer-how"]) {
     const f = $(id);
     f.textContent = "";
-    f.append(el("div", {}, "Data: CoinMarketCap API (quotes, OHLCV and Fear & Greed history for BTC, ETH, XRP, SOL and DOGE), kept in RE:'s own archive. RE: observes; it does not predict."));
+    f.append(el("div", {}, "frctlns — a temporal exploration playground."));
+    f.append(el("div", {}, "Data: CoinMarketCap API (quotes, OHLCV and Fear & Greed history for BTC, ETH, XRP, SOL and DOGE), kept in its own archive. frctlns observes; it does not predict."));
     f.append(el("div", {}, "Other windows: Wikimedia pageviews, Hacker News (Algolia), NASA APOD, USGS earthquakes, Open-Meteo weather, Blockchain.com, ECB rates via Frankfurter, FRED (Nasdaq, VIX, US dollar); X is a link only."));
   }
 }
