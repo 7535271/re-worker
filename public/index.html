@@ -477,6 +477,7 @@
   .lens .lr { display: grid; grid-template-columns: 1fr auto; gap: 1px 10px; padding: 8px 0; border-top: 1px solid var(--grid); }
   .lens .lr:first-of-type { border-top: 0; }
   .lens .ln { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+  #s-places-note .none-line { display: block; }
   .lens .lv { font-size: 14px; font-weight: 750; font-variant-numeric: tabular-nums; text-align: right; }
   .lens .ld { grid-column: 1 / -1; font-size: 12px; line-height: 1.35; color: var(--muted); }
   .lens .lr.cur .ln::after { content: " · found this place"; font-weight: 600; font-size: 11.5px; color: var(--muted); }
@@ -615,7 +616,7 @@
     <!-- the places in time that overlap with this day, most overlap first (2026-09-28, Shu and Nova) -->
     <section class="block" aria-label="Places that overlap">
       <h2>Places that overlap</h2>
-      <p class="lead">Other days that overlap with this one — at 00:00, afterwards, or in the windows that jumped. The most overlap comes first.</p>
+      <p class="lead">Other days that overlap with this one — at 00:00, afterwards, or in the windows that jumped.</p>
       <div id="s-places" class="rows places"></div>
       <p id="s-places-note" class="quiet"></p>
     </section>
@@ -635,7 +636,7 @@
       <div id="s-next">
         <div id="s-checks" class="checks"></div>
         <h3 class="subhead">What moved with it?</h3>
-        <p class="lead">This day and the month around it, one row per window. A big dot is a day that was unusual for that window, compared with its own past year. Where dots line up down a column, things moved together. Hindsight.</p>
+        <p class="lead">This day and the month around it, one row per window.</p>
         <div id="mt-view" class="seg mini" role="group" aria-label="Show as"><button type="button" data-v="dots">Dots</button><button type="button" data-v="lines">Lines</button></div>
         <div id="mt" class="mt" role="img" aria-label="Moved together: one row per window over the same days"></div>
         <p id="mt-sum" class="mt-sum" aria-live="polite"></p>
@@ -646,7 +647,7 @@
         </div>
         <p id="s-after" class="quiet"></p>
         <h3 class="subhead">The day itself, as recorded now</h3>
-        <p class="lead">None of this could be seen at 00:00. frctlns never uses it to find days that looked alike.</p>
+        <p class="lead">None of this was visible at 00:00. frctlns does not use it to find overlaps.</p>
         <div id="h-tiles" class="tiles"></div>
         <div id="h-open" class="opened" aria-live="polite"></div>
       </div>

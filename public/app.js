@@ -412,7 +412,7 @@ async function renderWorld() {
     title.textContent = "";
     found.textContent = "";
     rows.hidden = true;
-    how.textContent = "Enter a word, topic, or event. frctlns finds the days it left traces in the world — in what people read on Wikipedia and voted up on Hacker News.";
+    how.textContent = "";
     return;
   }
   const token = ++worldToken;
@@ -966,7 +966,7 @@ function noneWhy() {
   const mv = movesNow();
   if (!mv.results.length) out.push(["afterwards", mv.error ? mv.error : "no other day moved like this"]);
   const pr = patternCache.get(patternKey(S.day));
-  if (pr && pr.pattern.length < 2) out.push(["together", pr.pattern.length ? `only ${pr.pattern[0].name} jumped on this day` : "no window jumped on this day"]);
+  if (pr && pr.pattern.length < 2) out.push(["together", pr.pattern.length ? `only ${pr.pattern[0].name} jumped on this day` : "no windows jumped on this day"]);
   else if (pr && !pr.results.length) out.push(["together", `${patternText(pr.pattern)} — this set never jumped together again`]);
   return out;
 }
@@ -989,7 +989,8 @@ async function renderPlaces() {
     if (looking) box.append(el("p", { class: "empty" }, "Still looking through every window…"));
     note.textContent = "";
     const why = noneWhy();
-    if (why.length) note.append(textWithDates("span", {}, `No overlap ${why.map(([k, w]) => `${k}: ${w}`).join(" · ")}.`));
+    const cap = (k) => (k === "at 00:00" ? "At 00:00" : k[0].toUpperCase() + k.slice(1));
+    for (const [k, w] of why) note.append(textWithDates("span", { class: "none-line" }, `${cap(k)}: ${w}.`));
   };
   draw(!patternCache.has(patternKey(S.day)));
   if (!patternCache.has(patternKey(S.day))) {
@@ -1070,6 +1071,12 @@ function renderWhyPair(r, found) {
     w: `The word — the days “${S.q}” left traces: a Wikipedia peak or a top Hacker News story. Found with today's records.`,
   };
   box.append(el("p", { class: "t" }, `Found by: ${found.map((k) => kindTag(k, r.by[k])).join(" · ")}`));
+  // what was used to find it (moved here from under the chart: results stay short, the method lives here — Nova, 2026-09-28)
+  const used = [];
+  if (r.by.m) used.push(`At 00:00 used only what the market showed up to 00:00 on each day${r.by.m.later ? ` (${r.day} is later in history)` : ""}.`);
+  if (r.by.v || r.by.p) used.push(`${r.by.v && r.by.p ? "Afterwards and together" : r.by.v ? "Afterwards" : "Together"} used what happened after (hindsight)${r.by.v && r.by.v.stretch !== 1 ? ` — that day's move took ${r.by.v.stretch < 1 ? "about half" : "about twice"} as long` : ""}.`);
+  if (r.by.w) used.push(`The word was found with today's records of “${S.q}”.`);
+  box.append(el("p", { class: "n" }, `${used.join(" ")} What came after is shown for both days either way.`));
   const ul = el("ul", { class: "conds" });
   for (const k of KIND_ORDER) if (k !== "w" || S.q) ul.append(el("li", { class: found.includes(k) ? "on" : "" }, cond[k]));
   box.append(ul);
@@ -1117,13 +1124,7 @@ function drawNext(r, animate) {
   if (series.some((s) => s.kind === "context")) lg.append(key("--context", `the other places found ${r.kind === "w" ? `by “${S.q}”` : r.kind === "v" ? "afterwards" : r.kind === "p" ? "by the same windows" : "at 00:00"}`));
   drawChart(v);
   v.animate = false;
-  // what came after is shown for both days; what differs is whether it was used to find the pair (Nova, 2026-09-28)
-  const by = r.by || { [r.kind]: r };
-  const parts = [];
-  if (by.m) parts.push(`At 00:00 used only what the market showed up to 00:00 on each day${by.m.later ? ` (${r.day} is later in history)` : ""}.`);
-  if (by.v || by.p) parts.push(`${by.v && by.p ? "Afterwards and together" : by.v ? "Afterwards" : "Together"} used what happened after (hindsight)${by.v && by.v.stretch !== 1 ? ` — that day's move took ${by.v.stretch < 1 ? "about half" : "about twice"} as long` : ""}.`);
-  if (by.w) parts.push(`The word was found with today's records of “${S.q}”.`);
-  $("p-hidden").textContent = parts.join(" ");
+  $("p-hidden").textContent = "";
   const p1 = D.points.find((p) => p.offset === 1);
   if (p1 && p1.state === "unknown") $("p-hidden").textContent += ` ${S.day} is the newest day in the archive, so what came after it is not known yet.`;
 }
@@ -1226,7 +1227,7 @@ async function renderLens(r) {
     box.append(el("h3", {}, "What overlapped?"));
     for (const x of all) {
       const row = el("div", { class: `lr${r.by && r.by[x.pk] ? " cur" : ""}${x.off ? " off" : ""}` });
-      row.append(el("span", { class: "ln" }, x.name), el("span", { class: "lv" }, x.v), textWithDates("span", { class: "ld" }, x.d));
+      row.append(el("span", { class: "ln" }, x.name), el("span", { class: "lv" }, x.v));
       box.append(row);
     }
   };
