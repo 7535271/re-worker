@@ -497,36 +497,38 @@ export const MOVE_SPANS = [3, 7, 30];
 export const MOVE_STRETCHES = [0.5, 1, 2];
 const MOVE_POINTS = 24;
 const MOVE_MIN_RANGE = 0.25;
-export function movesLike(tl, i, span, { top = 5, stretches = MOVE_STRETCHES, gap = PICK_GAP_DAYS } = {}) {
+/* the log-price path around day c (from lead·k days before to span·k days after), sampled at MOVE_POINTS points */
+function sampleShape(tl, c, lead, span, k, out) {
   const P = tl.axes.price;
+  const a = c - Math.max(1, Math.round(lead * k)), b = c + Math.max(1, Math.round(span * k));
+  if (a < 0 || b >= tl.n || !(P[c] > 0) || !(P[b] > 0)) return null;
+  const l0 = Math.log(P[c]);
+  let lo = Infinity, hi = -Infinity;
+  for (let j = 0; j < MOVE_POINTS; j++) {
+    const t = a + ((b - a) * j) / (MOVE_POINTS - 1);
+    const x0 = Math.floor(t), x1 = Math.min(b, x0 + 1), f = t - x0;
+    if (!(P[x0] > 0) || !(P[x1] > 0)) return null;
+    const v = Math.log(P[x0]) * (1 - f) + Math.log(P[x1]) * f - l0;
+    out[j] = v;
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  return { range: hi - lo, move: P[b] / P[c] - 1, days: b - c };
+}
+function zNorm(v) {
+  let m = 0;
+  for (const x of v) m += x;
+  m /= v.length;
+  let sd = 0;
+  for (const x of v) sd += (x - m) ** 2;
+  sd = Math.sqrt(sd / v.length);
+  return sd > 0 ? Float64Array.from(v, (x) => (x - m) / sd) : null;
+}
+export function movesLike(tl, i, span, { top = 5, stretches = MOVE_STRETCHES, gap = PICK_GAP_DAYS } = {}) {
   const lead = Math.max(1, Math.round(span / 3));
   const buf = new Float64Array(MOVE_POINTS);
-  // the log-price path around day c, stretched by k, sampled at MOVE_POINTS points and centred at c
-  const sample = (c, k, out) => {
-    const a = c - Math.max(1, Math.round(lead * k)), b = c + Math.max(1, Math.round(span * k));
-    if (a < 0 || b >= tl.n || !(P[c] > 0) || !(P[b] > 0)) return null;
-    const l0 = Math.log(P[c]);
-    let lo = Infinity, hi = -Infinity;
-    for (let j = 0; j < MOVE_POINTS; j++) {
-      const t = a + ((b - a) * j) / (MOVE_POINTS - 1);
-      const x0 = Math.floor(t), x1 = Math.min(b, x0 + 1), f = t - x0;
-      if (!(P[x0] > 0) || !(P[x1] > 0)) return null;
-      const v = Math.log(P[x0]) * (1 - f) + Math.log(P[x1]) * f - l0;
-      out[j] = v;
-      if (v < lo) lo = v;
-      if (v > hi) hi = v;
-    }
-    return { range: hi - lo, move: P[b] / P[c] - 1, days: b - c };
-  };
-  const zOf = (v) => {
-    let m = 0;
-    for (const x of v) m += x;
-    m /= v.length;
-    let sd = 0;
-    for (const x of v) sd += (x - m) ** 2;
-    sd = Math.sqrt(sd / v.length);
-    return sd > 0 ? Float64Array.from(v, (x) => (x - m) / sd) : null;
-  };
+  const sample = (c, k, out) => sampleShape(tl, c, lead, span, k, out);
+  const zOf = zNorm;
   const qv = new Float64Array(MOVE_POINTS);
   const q = sample(i, 1, qv);
   if (!q) return { error: i + span >= tl.n ? "not enough days after this one yet" : "the price is missing around this day", results: [], span };
@@ -561,6 +563,48 @@ export function movesLike(tl, i, span, { top = 5, stretches = MOVE_STRETCHES, ga
   };
 }
 
+/* ── one pair of days, measured the way each search measures (2026-09-28, Shu and Nova: the same two days through different lenses) ──
+   looked: where the market stood (STATE) or how it moved (TRAJECTORY) over the w days up to each day, each as of its own 00:00.
+     Nothing after either day is used, so it holds for any two days, earlier or later.
+   moved: the shape of the price from a little before each day to span days after (hindsight), best of the same stretches as movesLike. */
+export function pairAlike(tl, st, q, c, { mode = "STATE", width = 7, axes: want = null, span = 7 } = {}) {
+  const out = {};
+  const w = Math.max(mode === "TRAJECTORY" ? 2 : 1, Math.floor(width));
+  const list = mode === "TRAJECTORY" ? TRAJ_AXES : STATE_AXES;
+  const presence = axisPresence(tl, st, mode, q, w);
+  const axes = list.filter((k) => (want ? want[k] !== false : true) && presence[k] === "on");
+  if (!axes.length) out.looked = { error: "no part of the market can be compared on your day" };
+  else {
+    const r = mode === "TRAJECTORY"
+      ? trajDistance(Object.fromEntries(axes.map((k) => [k, trajectory(tl, k, q, w)])), tl, c, w, axes, {}, new Float64Array(w))
+      : stateDistance(st, q, c, w, axes, {});
+    out.looked = !r || r.sw + 1e-9 < MIN_WEIGHT_SHARE * axes.length
+      ? { error: "too little of the market to compare on that day", width: w, mode }
+      : { similarity: Math.round((1 - r.d) * 1000) / 1000, width: w, mode, axes: Object.keys(r.used) };
+  }
+  const lead = Math.max(1, Math.round(span / 3));
+  const qv = new Float64Array(MOVE_POINTS), cv = new Float64Array(MOVE_POINTS);
+  const qs = sampleShape(tl, q, lead, span, 1, qv);
+  const qz = qs && zNorm(qv);
+  if (!qz) out.moved = { error: q + span >= tl.n ? "not enough days after your day yet" : "the price did not move", span, lead };
+  else {
+    let pick = null;
+    for (const k of MOVE_STRETCHES) {
+      const s = sampleShape(tl, c, lead, span, k, cv);
+      const cz = s && zNorm(cv);
+      if (!cz) continue;
+      let r = 0;
+      for (let j = 0; j < MOVE_POINTS; j++) r += qz[j] * cz[j];
+      r /= MOVE_POINTS;
+      if (!pick || r > pick.r) pick = { r, k, move: s.move, days: s.days };
+    }
+    out.moved = pick
+      ? { similarity: Math.round(pick.r * 1000) / 1000, stretch: pick.k, span, lead, move: pick.move, days: pick.days, queryMove: qs.move }
+      : { error: c + span >= tl.n ? "not enough days after that day yet" : "the price is missing around that day", span, lead };
+  }
+  return out;
+}
+
 export function createExplorer(series) {
   const tl = buildTimeline(series);
   const st = buildStates(tl);
@@ -571,5 +615,6 @@ export function createExplorer(series) {
     search: (opts) => search(tl, st, opts),
     replay: (day, limitDay) => replay(tl, indexOf(tl, day), indexOf(tl, limitDay)),
     movesLike: (day, span, opts) => movesLike(tl, indexOf(tl, day), span, opts),
+    pairAlike: (day, other, opts) => pairAlike(tl, st, indexOf(tl, day), indexOf(tl, other), opts),
   };
 }

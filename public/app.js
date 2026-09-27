@@ -1143,6 +1143,7 @@ function renderPast() {
     : "The market says these two days felt the same. Look at both through the same windows, as each looked at 00:00 UTC.";
   $("k-d").textContent = S.day;
   $("k-p").textContent = r.day;
+  renderLens(r);
   renderCompared(r);
   renderPair(r);
   drawNext(r, false);
@@ -1255,6 +1256,56 @@ function comparedOf(r) {
     note: traj ? "The price's change from the first day of each range (frctlns also compares volume, volatility and Fear & Greed)." : "The price's place within its own past year: 0 = its lowest, 1 = its highest (frctlns compares every part of the market this way; the price stands for them here).",
     fixed01: !traj,
   };
+}
+/* ── the same two days through each lens (2026-09-28, Shu and Nova: the same pair, different ways of looking).
+   Each row measures this pair the way that search measures, and says over which days. ── */
+async function pairTogether(dq, dc) {
+  const { per } = await flagData();
+  const i = dayNum(dq) - ex.tl.d0, j = dayNum(dc) - ex.tl.d0;
+  const a = per.filter((q) => litAt(q, i) >= 0).map((q) => q.name);
+  const b = per.filter((q) => litAt(q, j) >= 0).map((q) => q.name);
+  return { a, b, both: a.filter((x) => b.includes(x)) };
+}
+let lensToken = 0;
+async function renderLens(r) {
+  const box = $("p-lens");
+  const token = ++lensToken;
+  const axes = {};
+  for (const k of AXES) axes[k] = !S.off.has(k);
+  const pa = ex.pairAlike(S.day, r.day, { mode: S.mode, width: S.width, axes, span: S.mv });
+  const rows = [];
+  const L = pa.looked;
+  rows.push({ pk: "m", name: "Looked like this", v: L.error ? "—" : `${Math.round(L.similarity * 100)}%`, off: !!L.error,
+    d: L.error ? L.error : `${L.mode === "TRAJECTORY" ? "how the market moved" : "where the market stood"} over the ${L.width === 1 ? "day itself" : `${L.width} days up to each day`}, each at its own 00:00` });
+  const M = pa.moved;
+  rows.push({ pk: "v", name: "Moved like this", v: M.error ? "—" : M.similarity > 0 ? `${Math.round(M.similarity * 100)}%` : "opposite", off: !!M.error || M.similarity <= 0,
+    d: M.error ? M.error : `the shape of the price from ${M.lead} day${M.lead === 1 ? "" : "s"} before to ${SPAN_NAME[M.span] === "3 days" ? "3 days" : `a ${SPAN_NAME[M.span]}`} after${M.stretch !== 1 && M.similarity > 0 ? ` (that day's move took ${M.stretch < 1 ? "half" : "twice"} as long)` : ""} · ${pct(M.queryMove)} here, ${pct(M.move)} there · hindsight` });
+  const draw = (tg) => {
+    const all = [...rows];
+    if (tg === null) all.push({ pk: "p", name: "Moved together", v: "…", off: true, d: "looking at every window…" });
+    else if (tg.error) all.push({ pk: "p", name: "Moved together", v: "—", off: true, d: `could not be looked at this time (${tg.error})` });
+    else all.push({ pk: "p", name: "Moved together", v: tg.a.length ? `${tg.both.length} of ${tg.a.length}` : "—", off: !tg.both.length,
+      d: !tg.a.length ? "no window jumped on your day (on the day or the day after)"
+        : tg.both.length ? `jumped on both days: ${tg.both.join(", ")} · hindsight` : `none of your day's ${tg.a.length} windows jumped on that day · hindsight` });
+    if (S.q) {
+      const ms = momentsNow();
+      const inQ = ms.some((m) => m.day === S.day), inC = ms.some((m) => m.day === r.day);
+      all.push({ pk: "w", name: "Same word", v: inQ && inC ? "both" : inQ || inC ? "one" : "—", off: !(inQ && inC),
+        d: inQ && inC ? `each is a moment of “${S.q}”` : inQ || inC ? `only ${inQ ? "your day" : "that day"} is a moment of “${S.q}”` : `neither is a moment of “${S.q}”` });
+    }
+    box.textContent = "";
+    box.append(el("h3", {}, `These two days, ${all.length === 4 ? "four" : "three"} ways`));
+    for (const x of all) {
+      const row = el("div", { class: `lr${x.pk === r.kind ? " cur" : ""}${x.off ? " off" : ""}` });
+      row.append(el("span", { class: "ln" }, x.name), el("span", { class: "lv" }, x.v), textWithDates("span", { class: "ld" }, x.d));
+      box.append(row);
+    }
+  };
+  draw(null);
+  let tg;
+  try { tg = await pairTogether(S.day, r.day); } catch (e) { tg = { error: e.message }; }
+  if (token !== lensToken || S.view !== "past") return;
+  draw(tg);
 }
 function renderCompared(r) {
   const box = $("p-cmp");

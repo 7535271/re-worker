@@ -444,7 +444,18 @@
   .ptitle { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 22px !important; line-height: 1.2; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
   .ptitle i { display: inline-block; width: 10px; height: 10px; border-radius: 999px; margin-right: 6px; vertical-align: middle; }
   .ptitle .ar { color: var(--muted); font-weight: 600; }
-  .kinds-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 14px 0 8px; }
+  .kinds-h { margin: 14px 0 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .kinds-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 6px 0 8px; }
+  /* the same two days through each lens (2026-09-28, Shu and Nova) */
+  .lens { background: var(--surface); border-radius: 16px; box-shadow: 0 0 0 1px var(--ring); padding: 12px 14px 6px; margin: 4px 0 12px; }
+  .lens h3 { margin: 0 0 6px; font-size: 14px; font-weight: 750; }
+  .lens .lr { display: grid; grid-template-columns: 1fr auto; gap: 1px 10px; padding: 8px 0; border-top: 1px solid var(--grid); }
+  .lens .lr:first-of-type { border-top: 0; }
+  .lens .ln { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+  .lens .lv { font-size: 14px; font-weight: 750; font-variant-numeric: tabular-nums; text-align: right; }
+  .lens .ld { grid-column: 1 / -1; font-size: 12px; line-height: 1.35; color: var(--muted); }
+  .lens .lr.cur .ln::after { content: " · how this pair was found"; font-weight: 600; font-size: 11.5px; color: var(--muted); }
+  .lens .lr.off .lv { color: var(--muted); font-weight: 600; }
   .kinds-seg button { border: 0; border-radius: 12px; padding: 9px 10px; background: var(--surface); box-shadow: 0 0 0 1px var(--ring); color: var(--ink-2); font: inherit; font-size: 13.5px; font-weight: 650; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
   .kinds-seg button small { display: block; margin-top: 1px; font-size: 11px; font-weight: 500; color: var(--muted); }
   .kinds-seg button[aria-pressed="true"] { background: var(--on-bg); color: var(--on-ink); box-shadow: none; }
@@ -632,7 +643,8 @@
   <main id="v-past" class="screen" hidden aria-label="Two days side by side">
     <header class="day-head">
       <h1 id="p-title" class="ptitle"></h1>
-      <div id="p-kinds" class="kinds-seg" role="group" aria-label="Alike by"></div>
+      <p class="kinds-h">Go to the closest day by</p>
+      <div id="p-kinds" class="kinds-seg" role="group" aria-label="Go to the closest day by"></div>
       <div id="p-range" class="seg mini" role="group" aria-label="Compared over"></div>
       <p id="p-sub" class="sub"></p>
       <p id="p-what" class="what"></p>
@@ -643,6 +655,7 @@
     <section class="block" aria-label="Was it really alike?">
       <h2>Was it really alike?</h2>
       <p id="p-lead" class="lead"></p>
+      <div id="p-lens" class="lens" aria-live="polite"></div>
       <div id="p-cmp" class="pcmp"></div>
       <div class="pairkey"><span><i style="background:var(--series-d)"></i><b id="k-d"></b> your day</span><span><i style="background:var(--series-sel)"></i><b id="k-p"></b> that day</span></div>
       <div id="p-tiles" class="tiles"></div>
