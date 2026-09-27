@@ -1555,8 +1555,8 @@ async function scene(env, url) {
 const SERIES_V = "v1";
 const SERIES_FROM = "2012-04-01"; // 倉庫の最初の日（2013-04-28）の1年前から：最初の日から「過去1年の中の位置」が出せるように
 const SERIES_TTL = 6 * 3600;
-async function seriesAttention(today) {
-  const r = await look(`${WIKI}/per-article/en.wikipedia/all-access/user/Bitcoin/daily/2015070100/${ymdCompact(today)}00`, { timeoutMs: 12000 });
+async function seriesAttention(today, article = "Bitcoin") {
+  const r = await look(`${WIKI}/per-article/en.wikipedia/all-access/user/${encodeURIComponent(article)}/daily/2015070100/${ymdCompact(today)}00`, { timeoutMs: 12000 });
   const items = r.response.body && Array.isArray(r.response.body.items) ? r.response.body.items : null;
   if (!items || !items.length) return { error: String(errOf(r) || `HTTP ${r.response.http_status}`).slice(0, 200) };
   const d0 = dayNum("2015-07-01");
@@ -1569,7 +1569,7 @@ async function seriesAttention(today) {
   }
   let last = n - 1;
   while (last >= 0 && values[last] === null) last--;
-  return { from: "2015-07-01", values: values.slice(0, last + 1), unit: "views per day (people, not bots)", source: "Wikimedia pageviews: en.wikipedia 'Bitcoin'" };
+  return { from: "2015-07-01", values: values.slice(0, last + 1), unit: "views per day (people, not bots)", article, source: `Wikimedia pageviews: en.wikipedia '${article.replace(/_/g, " ")}'` };
 }
 async function seriesChain(chart, today) {
   // timespan=all はプローブで確かめた形（2009年からの全部。SERIES_FROM より前は捨てる）
@@ -1606,21 +1606,142 @@ async function windowSeries(env, url) {
   if (!(w in lagOf)) return out({ error: "bad parameters", problems: ["w must be attention, tx, hash or weather"], example: "/window-series?w=attention" }, 400);
   const place = w === "weather" ? placeOf(url) : null;
   if (w === "weather" && (!place || place.bad)) return out({ error: "bad parameters", problems: ["weather needs lat (−90…90) and lon (−180…180)"], example: "/window-series?w=weather&lat=35.68&lon=139.69&place=Tokyo" }, 400);
+  // Attention follows the asset you chose (its English Wikipedia article); the other windows do not
+  const aid = url.searchParams.get("id") || "1";
+  if (w === "attention" && !ASSETS[aid]) return out({ error: "bad parameters", problems: ["id must be one of " + ARCHIVE_IDS.join(", ")] }, 400);
   const ns = env.RE_CACHE || null;
-  const key = `wseries:${SERIES_V}:${w}${place ? `:${place.lat},${place.lon}` : ""}`;
+  const key = `wseries:${SERIES_V}:${w}${w === "attention" && aid !== "1" ? `:${aid}` : ""}${place ? `:${place.lat},${place.lon}` : ""}`;
   const send = (text, how) => new Response(text, { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-RE-Window": how, ...CORS } });
   if (ns && url.searchParams.get("fresh") !== "1") {
     const hit = await ns.get(key);
     if (hit) return send(hit, "archive");
   }
   const today = dayKey(iso(nowMs()));
-  const body = w === "attention" ? await seriesAttention(today)
+  const body = w === "attention" ? await seriesAttention(today, ASSETS[aid].wiki)
     : w === "tx" ? await seriesChain("n-transactions", today)
     : w === "hash" ? await seriesChain("hash-rate", today)
     : await seriesWeather(place, today);
   if (body.error) return out({ error: `the ${w} window could not be read this time`, detail: body.error }, 502);
   const text = JSON.stringify({ w, as_of_lag: lagOf[w], generated_at: iso(nowMs()), ...body });
   if (ns) { try { await ns.put(key, text, { expirationTtl: SERIES_TTL }); } catch (e) { console.error("window cache", e); } }
+  return send(text, "fresh");
+}
+
+/* ──────────────────────────────────────────
+   出来事の日（/moments?q=）— 世界から入る入口（2026-09-27 しゅう・ノヴァ）
+   言葉を1つもらって、「それが起きていた日」を探す。材料は2つ:
+   ・英語版 Wikipedia でその言葉の記事がふだんの何倍も読まれた日（2015-07-01 から）
+   ・Hacker News でその言葉の記事がいちばん点を集めた日（2013 から）
+   どちらも「今の記録」で探す（後知恵）。見つけた日に立つと、見えるのはその日 00:00 までに出ていたものだけ
+   ────────────────────────────────────────── */
+const MOMENTS_V = "v1";
+const MOMENTS_TTL = 24 * 3600;
+const MOMENTS_FROM = "2013-01-01";     // 市場の倉庫が始まる日より前は探さない
+const MOMENTS_MAX = 8;
+const MOMENT_MERGE_DAYS = 3;           // 3日以内に並んだ手がかりは、同じ出来事のいちばん早い日にまとめる
+const WIKI_PEAK_TIMES = 4;             // ふだん（中央値）の4倍以上
+const WIKI_PEAK_MIN = 2000;            // かつ 1日 2,000 回以上
+const WIKI_PEAK_SPAN = 10;             // 前後10日の中でいちばん高い日
+const HN_MIN_POINTS = 100;
+function momentsQuery(raw) {
+  const q = String(raw || "").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+  if (q.length < 2 || q.length > 40 || !/^[\p{L}\p{N} .'&+-]+$/u.test(q)) return null;
+  return q;
+}
+async function momentsWiki(q, today) {
+  const os = await look(`https://en.wikipedia.org/w/api.php?${new URLSearchParams({ action: "opensearch", search: q, limit: "1", namespace: "0", format: "json", redirects: "resolve" })}`, { timeoutMs: 8000 });
+  const b = os.response.body;
+  const title = Array.isArray(b) && Array.isArray(b[1]) && typeof b[1][0] === "string" ? b[1][0] : null;
+  if (!title) return { article: null, peaks: [], note: Array.isArray(b) ? "no English Wikipedia article for this word" : `Wikipedia could not be searched this time (${errOf(os) || "HTTP " + os.response.http_status})` };
+  const art = title.replace(/ /g, "_");
+  const r = await look(`${WIKI}/per-article/en.wikipedia/all-access/user/${encodeURIComponent(art)}/daily/2015070100/${ymdCompact(today)}00`, { timeoutMs: 12000 });
+  const items = r.response.body && Array.isArray(r.response.body.items) ? r.response.body.items : null;
+  const article = { title, url: `https://en.wikipedia.org/wiki/${encodeURIComponent(art)}` };
+  if (!items || !items.length) return { article, peaks: [], note: `the views of “${title}” could not be read this time` };
+  const d0 = dayNum("2015-07-01");
+  const n = dayNum(today) - d0 + 1;
+  const v = new Array(n).fill(null);
+  for (const it of items) {
+    const t = it.timestamp;
+    const i = Date.UTC(+t.slice(0, 4), +t.slice(4, 6) - 1, +t.slice(6, 8)) / DAY - d0;
+    if (i >= 0 && i < n && typeof it.views === "number") v[i] = it.views;
+  }
+  const vals = v.filter((x) => x !== null).sort((a, b) => a - b);
+  const usual = vals.length ? vals[Math.floor(vals.length / 2)] : 0;
+  const peaks = [];
+  for (let i = 0; i < n; i++) {
+    const x = v[i];
+    if (x === null || x < WIKI_PEAK_MIN || x < WIKI_PEAK_TIMES * Math.max(1, usual)) continue;
+    let top = true;
+    for (let j = Math.max(0, i - WIKI_PEAK_SPAN); j <= Math.min(n - 1, i + WIKI_PEAK_SPAN) && top; j++) if (j !== i && v[j] !== null && (v[j] > x || (v[j] === x && j < i))) top = false;
+    if (top) peaks.push({ day: ymdOf(d0 + i), views: x, usual, times: Math.round((x / Math.max(1, usual)) * 10) / 10 });
+  }
+  return { article, usual, peaks };
+}
+async function momentsHn(q) {
+  const a = Date.parse(MOMENTS_FROM + "T00:00:00Z") / 1000;
+  const r = await look(`${HN}/search?${new URLSearchParams({ query: q, tags: "story", hitsPerPage: "60", attributesToRetrieve: "title,points,created_at_i,url,objectID", attributesToHighlight: "none", numericFilters: `created_at_i>=${a},points>=${HN_MIN_POINTS}` })}`, { timeoutMs: 8000 });
+  const hits = r.response.body && r.response.body.hits;
+  if (!Array.isArray(hits)) return { stories: [], note: `Hacker News could not be searched this time (${errOf(r) || "HTTP " + r.response.http_status})` };
+  const byDay = new Map();
+  for (const h of hits) {
+    if (!h || typeof h.created_at_i !== "number" || typeof h.points !== "number") continue;
+    const day = ymdOf(Math.floor(h.created_at_i / 86400));
+    const cur = byDay.get(day);
+    if (!cur || h.points > cur.points) {
+      byDay.set(day, { day, title: String(h.title || "").slice(0, 200), points: h.points, url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`, hn_url: `https://news.ycombinator.com/item?id=${h.objectID}` });
+    }
+  }
+  return { stories: [...byDay.values()] };
+}
+function pickMoments(wiki, hn) {
+  const cands = [];
+  const maxT = Math.max(1, ...wiki.peaks.map((p) => p.times));
+  const maxP = Math.max(1, ...hn.stories.map((s) => s.points));
+  for (const p of wiki.peaks) cands.push({ day: p.day, w: p.times / maxT, wiki: { views: p.views, usual: p.usual, times: p.times } });
+  for (const s of hn.stories) cands.push({ day: s.day, h: s.points / maxP, hn: { title: s.title, points: s.points, url: s.url, hn_url: s.hn_url } });
+  cands.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+  // 近い手がかりは1つの出来事に（いちばん早い日に置く。点数・倍率はいちばん強いものを残す）
+  const merged = [];
+  for (const c of cands) {
+    const last = merged[merged.length - 1];
+    if (last && dayNum(c.day) - dayNum(last.end) <= MOMENT_MERGE_DAYS) {
+      last.end = c.day;
+      if (c.wiki && (!last.wiki || c.wiki.times > last.wiki.times)) { last.wiki = c.wiki; last.w = c.w; }
+      if (c.hn && (!last.hn || c.hn.points > last.hn.points)) { last.hn = c.hn; last.h = c.h; }
+    } else merged.push({ day: c.day, end: c.day, w: c.w || 0, h: c.h || 0, wiki: c.wiki || null, hn: c.hn || null });
+  }
+  for (const m of merged) m.score = Math.round((Math.max(m.w, m.h) + 0.25 * Math.min(m.w, m.h)) * 1000) / 1000;
+  const top = [...merged].sort((a, b) => b.score - a.score).slice(0, MOMENTS_MAX);
+  return top.sort((a, b) => (a.day < b.day ? -1 : 1)).map((m) => ({ day: m.day, score: m.score, wiki: m.wiki, hn: m.hn }));
+}
+async function moments(env, url) {
+  const q = momentsQuery(url.searchParams.get("q"));
+  if (!q) return out({ error: "bad parameters", problems: ["q must be 2–40 letters, numbers or spaces"], example: "/moments?q=pandemic" }, 400);
+  const ns = env.RE_CACHE || null;
+  const key = `moments:${MOMENTS_V}:${q}`;
+  const send = (text, how) => new Response(text, { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-RE-Moments": how, ...CORS } });
+  if (ns && url.searchParams.get("fresh") !== "1") {
+    const hit = await ns.get(key);
+    if (hit) return send(hit, "archive");
+  }
+  const today = dayKey(iso(nowMs()));
+  const [wiki, hn] = await Promise.all([
+    momentsWiki(q, today).catch((e) => ({ article: null, peaks: [], note: String(e && e.message ? e.message : e).slice(0, 160) })),
+    momentsHn(q).catch((e) => ({ stories: [], note: String(e && e.message ? e.message : e).slice(0, 160) })),
+  ]);
+  const failedBoth = wiki.note && wiki.note.includes("could not") && hn.note;
+  if (failedBoth) return out({ error: "the world could not be searched this time", detail: [wiki.note, hn.note] }, 502);
+  const body = {
+    q, generated_at: iso(nowMs()),
+    article: wiki.article,
+    moments: pickMoments(wiki, hn),
+    how: `Found with today's records (hindsight). A day is listed when English Wikipedia's article on the word was read at least ${WIKI_PEAK_TIMES}× its usual (median) day and the most in ${WIKI_PEAK_SPAN} days either side, or when a Hacker News story about it got its most points that day (${HN_MIN_POINTS}+). Clues within ${MOMENT_MERGE_DAYS} days are one moment, placed on the earliest day.`,
+    notes: [wiki.note, hn.note].filter(Boolean),
+  };
+  const text = JSON.stringify(body);
+  // 片方しか読めなかった答えは短く覚える（次に来た人がもう一度両方を試せるように）
+  if (ns) { try { await ns.put(key, text, { expirationTtl: body.notes.some((x) => x.includes("could not")) ? 3600 : MOMENTS_TTL }); } catch (e) { console.error("moments cache", e); } }
   return send(text, "fresh");
 }
 
@@ -1753,7 +1874,8 @@ export default {
             "/ — the app (public/index.html, public/app.js, public/engine.js)",
             "/series?id=1 — every stored day for one asset, from the archive (no CMC call). ids: 1 BTC, 1027 ETH, 52 XRP, 5426 SOL, 74 DOGE. Optional &from=2020&to=2024 (years)",
             "/scene?day=YYYY-MM-DD — the same day through other windows: Wikipedia (en, ja), Hacker News, NASA APOD, earthquakes, ECB rates, the Bitcoin network, and a door to X search. window_time says, per window, when it is observed, published and revised, and how many days back it was visible at D 00:00 UTC (as_of_lag). Add &lat=&lon=&place= for the weather at one place",
-            "/window-series?w=attention|tx|hash|weather — every day's value of one numeric window (Wikipedia 'Bitcoin' views, Bitcoin transactions, hash rate, or the weather at &lat=&lon=&place=), kept 6 hours. The value on a day is what happened that day; at D 00:00 UTC only D − as_of_lag was out",
+            "/moments?q=pandemic — days when something was happening in the world, found with today's records: the day a word's English Wikipedia article peaked (from 2015-07-01) and the day Hacker News stories about it got the most points (from 2013). Kept 1 day",
+            "/window-series?w=attention|tx|hash|weather — every day's value of one numeric window (Wikipedia views of the asset's article — &id= as in /series, default Bitcoin — Bitcoin transactions, hash rate, or the weather at &lat=&lon=&place=), kept 6 hours. The value on a day is what happened that day; at D 00:00 UTC only D − as_of_lag was out",
             "/probe/published — when yesterday's Wikipedia, Bitcoin-network and weather values first appeared (measured by the cron, for the AS OF view)",
             "/archive/status — what the archive holds, what is missing, recent errors",
             "/archive/step — do one unit of archive work now for one asset (build one missing year, or refresh the recent days). Optional &id=",
@@ -1782,6 +1904,7 @@ export default {
       if (p === "/probe/wiki-top") return out(await probeWikiTop());
       if (p === "/scene") return await scene(env, url);
       if (p === "/window-series") return await windowSeries(env, url);
+      if (p === "/moments") return await moments(env, url);
       if (p === "/probe/gdelt") return out(await probeGdelt(url.searchParams.get("only")));
       if (p === "/probe/weather") return out(await probeWeather());
       if (p === "/probe/quakes") return out(await probeQuakes());
