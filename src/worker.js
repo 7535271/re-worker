@@ -1629,12 +1629,13 @@ async function windowSeries(env, url) {
 
 /* ──────────────────────────────────────────
    出来事の日（/moments?q=）— 世界から入る入口（2026-09-27 しゅう・ノヴァ）
-   言葉を1つもらって、「それが起きていた日」を探す。材料は2つ:
+   言葉（単語・話題・出来事）を1つもらって、それが世界に痕跡を残した日を探す。出来事を「検出」するのではない。
+   材料は2つの公開の痕跡（attention traces）:
    ・英語版 Wikipedia でその言葉の記事がふだんの何倍も読まれた日（2015-07-01 から）
    ・Hacker News でその言葉の記事がいちばん点を集めた日（2013 から）
    どちらも「今の記録」で探す（後知恵）。見つけた日に立つと、見えるのはその日 00:00 までに出ていたものだけ
    ────────────────────────────────────────── */
-const MOMENTS_V = "v1";
+const MOMENTS_V = "v2";          // v2: HN counts only stories whose title has the word
 const MOMENTS_TTL = 24 * 3600;
 const MOMENTS_FROM = "2013-01-01";     // 市場の倉庫が始まる日より前は探さない
 const MOMENTS_MAX = 8;
@@ -1678,14 +1679,21 @@ async function momentsWiki(q, today) {
   }
   return { article, usual, peaks };
 }
+/* the word itself must be in the title (as a word, plural allowed): Algolia also matches text, URLs and near spellings */
+function titleHas(q) {
+  const esc = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s+");
+  const re = new RegExp(`(^|[^\\p{L}\\p{N}])${esc}(s|es)?([^\\p{L}\\p{N}]|$)`, "iu");
+  return (title) => re.test(String(title || "").normalize("NFKC"));
+}
 async function momentsHn(q) {
   const a = Date.parse(MOMENTS_FROM + "T00:00:00Z") / 1000;
-  const r = await look(`${HN}/search?${new URLSearchParams({ query: q, tags: "story", hitsPerPage: "60", attributesToRetrieve: "title,points,created_at_i,url,objectID", attributesToHighlight: "none", numericFilters: `created_at_i>=${a},points>=${HN_MIN_POINTS}` })}`, { timeoutMs: 8000 });
+  const has = titleHas(q);
+  const r = await look(`${HN}/search?${new URLSearchParams({ query: q, tags: "story", hitsPerPage: "100", attributesToRetrieve: "title,points,created_at_i,url,objectID", attributesToHighlight: "none", numericFilters: `created_at_i>=${a},points>=${HN_MIN_POINTS}` })}`, { timeoutMs: 8000 });
   const hits = r.response.body && r.response.body.hits;
   if (!Array.isArray(hits)) return { stories: [], note: `Hacker News could not be searched this time (${errOf(r) || "HTTP " + r.response.http_status})` };
   const byDay = new Map();
   for (const h of hits) {
-    if (!h || typeof h.created_at_i !== "number" || typeof h.points !== "number") continue;
+    if (!h || typeof h.created_at_i !== "number" || typeof h.points !== "number" || !has(h.title)) continue;
     const day = ymdOf(Math.floor(h.created_at_i / 86400));
     const cur = byDay.get(day);
     if (!cur || h.points > cur.points) {
@@ -1736,7 +1744,7 @@ async function moments(env, url) {
     q, generated_at: iso(nowMs()),
     article: wiki.article,
     moments: pickMoments(wiki, hn),
-    how: `Found with today's records (hindsight). A day is listed when English Wikipedia's article on the word was read at least ${WIKI_PEAK_TIMES}× its usual (median) day and the most in ${WIKI_PEAK_SPAN} days either side, or when a Hacker News story about it got its most points that day (${HN_MIN_POINTS}+). Clues within ${MOMENT_MERGE_DAYS} days are one moment, placed on the earliest day.`,
+    how: `Public traces, found with today's records (hindsight) — not an event detector. A day is listed when English Wikipedia's article on the word was read at least ${WIKI_PEAK_TIMES}× its usual (median) day and the most in ${WIKI_PEAK_SPAN} days either side, or when a Hacker News story with the word in its title got its most points that day (${HN_MIN_POINTS}+). Traces within ${MOMENT_MERGE_DAYS} days are one moment, placed on the earliest day.`,
     notes: [wiki.note, hn.note].filter(Boolean),
   };
   const text = JSON.stringify(body);
@@ -1874,7 +1882,7 @@ export default {
             "/ — the app (public/index.html, public/app.js, public/engine.js)",
             "/series?id=1 — every stored day for one asset, from the archive (no CMC call). ids: 1 BTC, 1027 ETH, 52 XRP, 5426 SOL, 74 DOGE. Optional &from=2020&to=2024 (years)",
             "/scene?day=YYYY-MM-DD — the same day through other windows: Wikipedia (en, ja), Hacker News, NASA APOD, earthquakes, ECB rates, the Bitcoin network, and a door to X search. window_time says, per window, when it is observed, published and revised, and how many days back it was visible at D 00:00 UTC (as_of_lag). Add &lat=&lon=&place= for the weather at one place",
-            "/moments?q=pandemic — days when something was happening in the world, found with today's records: the day a word's English Wikipedia article peaked (from 2015-07-01) and the day Hacker News stories about it got the most points (from 2013). Kept 1 day",
+            "/moments?q=eclipse — the days a word, topic or event left public traces, found with today's records: the day its English Wikipedia article peaked (from 2015-07-01) and the day a Hacker News story with it in the title got the most points (from 2013). Traces, not an event detector. Kept 1 day",
             "/window-series?w=attention|tx|hash|weather — every day's value of one numeric window (Wikipedia views of the asset's article — &id= as in /series, default Bitcoin — Bitcoin transactions, hash rate, or the weather at &lat=&lon=&place=), kept 6 hours. The value on a day is what happened that day; at D 00:00 UTC only D − as_of_lag was out",
             "/probe/published — when yesterday's Wikipedia, Bitcoin-network and weather values first appeared (measured by the cron, for the AS OF view)",
             "/archive/status — what the archive holds, what is missing, recent errors",
