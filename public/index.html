@@ -485,6 +485,10 @@
   .lock { margin-top: 2px; font-size: 14px; font-weight: 600; color: var(--ink-2); }
   .lock span { font-size: 16px; }
   .state-head { margin-top: 4px; }
+  .mt { margin-top: 6px; background: var(--surface); border-radius: 16px; box-shadow: 0 0 0 1px var(--ring); padding: 8px 6px 4px; }
+  .mt svg { display: block; width: 100%; height: auto; }
+  .mt-sum { margin: 10px 2px 0; font-size: 14px; line-height: 1.4; color: var(--ink); }
+  .mt-sum:empty { display: none; }
 </style>
 </head>
 <body>
@@ -562,6 +566,11 @@
           <div id="s-tip" class="tip" aria-hidden="true"></div>
         </div>
         <p id="s-after" class="quiet"></p>
+        <h3 class="subhead">Moved together?</h3>
+        <p class="lead">The same days, one line per window. A dot marks a day that was unusual for that window, compared with its own past year. Hindsight.</p>
+        <div id="mt" class="mt" role="img" aria-label="Moved together: one line per window over the same days"></div>
+        <p id="mt-sum" class="mt-sum" aria-live="polite"></p>
+        <p id="mt-note" class="quiet"></p>
         <h3 class="subhead">The day itself, as recorded now</h3>
         <p class="lead">None of this could be seen at 00:00. RE: never uses it to find look-alike days.</p>
         <div id="h-tiles" class="tiles"></div>
@@ -682,6 +691,7 @@
       <p><strong>Short and incomplete history</strong>: a day in the archive's first year has less than a year behind it (short history); a later day can have gaps in its past year (incomplete history). Both stay in the list, marked with how many days were there to compare.</p>
       <p>Only axes present on both sides are compared; their weights are shared out again. A past day is compared only if at least half of D's axes (by weight) can be compared there — the ones left out are counted, not hidden.</p>
       <p><strong>Moved like this afterwards</strong> (hindsight) is the other kind of alike: not where the market stood, but how it moved. It compares the shape of the price from a little before the day to 3 days, a week or a month after it, with every other day in the archive, earlier or later. Only the shape counts — a move a third of the size, or one that took half or twice as long, can still match — and each result shows how much it really moved. It uses what happened after the day, so it opens only with what happened next.</p>
+      <p><strong>Moved together?</strong> (hindsight) lays the same 38 days — a week before the day to a month after — under each other, one line per window: the coin's price, Fear &amp; Greed and the Bitcoin network; the coin on Wikipedia and on Hacker News; Nasdaq, VIX and the US dollar (FRED); and all of English Wikipedia. Each line is scaled to its own range. A dot marks a day that was unusual for that window: a change at least three times its usual day-to-day change over the year before (for Hacker News, at least three times the month's usual count). RE: does not say what caused what. Some windows move together, some later, some not at all — and nothing lining up is a result too.</p>
       <p><strong>Fear &amp; Greed</strong> is CMC's index for the whole crypto market. It is the same for every coin: on an ETH day it tells the mood of the market around ETH, not ETH's own.</p>
       <p><strong>Other windows</strong> (Wikipedia, weather, the Bitcoin network and the rest) never change which days are found. They only show how that day looked from somewhere else, using what had come out by 00:00 UTC of each day. Attention follows the coin you chose (its English Wikipedia article); the Bitcoin network is Bitcoin's own chain, shown for every coin.</p>
       <p><strong>From the world</strong>: a word, topic or event finds the days it left public traces — the day its English Wikipedia article was read far more than usual (from 2015-07-01), or the day a Hacker News story with the word in its title got its most points (from 2013). These are attention traces found with today's records, not an event detector. Once you stand on one of these days, you see only what had come out by its 00:00 UTC; the day itself opens with what happened next.</p>

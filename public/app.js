@@ -587,6 +587,188 @@ function drawOwn(animate) {
   const last = rep.points[rep.points.length - 1];
   $("s-after").textContent = last.state === "unknown" ? `The archive ends on ${ex.last}: later days are not known yet.` : "";
   renderTiles("h", { kind: "hind" });
+  renderTogether();
+}
+
+/* ── Moved together? (hindsight): the same 38 days, one line per window, stacked so they can be read down a column.
+   A dot = an unusual day for that window: a change ≥ 3× its usual day-to-day change over the year before
+   (robust: 1.4826 × the median absolute change). Hacker News counts: ≥ 3× the month's median and ≥ 5.
+   RE: does not say what caused what — together, later, or not at all are all results (Nova, 2026-09-28) ── */
+const MT_BEFORE = 7, MT_AFTER = 30;
+const TOGETHER = [
+  { group: "Crypto" },
+  { k: "price", name: () => `${sym()} price`, kind: "log", main: true },
+  { k: "fg", name: () => "Fear & Greed", kind: "diff" },
+  { k: "tx", name: () => "Bitcoin network", kind: "log", w: "tx" },
+  { group: "Attention to it" },
+  { k: "wiki", name: () => `${sym()} on Wikipedia`, kind: "log", w: "attention" },
+  { k: "hn", name: () => `${sym()} on Hacker News`, kind: "count" },
+  { group: "Money" },
+  { k: "nasdaq", name: () => "Nasdaq", kind: "log", w: "nasdaq" },
+  { k: "vix", name: () => "VIX", kind: "log", w: "vix" },
+  { k: "usd", name: () => "US dollar", kind: "log", w: "usd" },
+  { group: "The world" },
+  { k: "wikitotal", name: () => "All of Wikipedia", kind: "log", w: "wikitotal" },
+];
+const talks = new Map();
+function loadTalk(q, day) {
+  const key = `${q}|${day}`;
+  if (!talks.has(key)) {
+    const p = fetch(`/talk?${new URLSearchParams({ q, day })}`).then(async (r) => {
+      const b = await r.json().catch(() => null);
+      if (!r.ok || !b || !Array.isArray(b.counts)) throw new Error((b && (b.detail || b.error)) || `HTTP ${r.status}`);
+      return b;
+    });
+    p.catch(() => talks.delete(key));
+    talks.set(key, p);
+  }
+  return talks.get(key);
+}
+/* what happened during UTC day d, for each window (the price and Fear & Greed of day d are read at the next 00:00) */
+function dailyOf(row, got, day0) {
+  const n = MT_BEFORE + MT_AFTER + 1, back = 365;
+  const first = dayNum(day0) - MT_BEFORE - back;
+  const len = n + back;
+  const out = new Array(len).fill(null);
+  const tl = ex.tl;
+  for (let j = 0; j < len; j++) {
+    const d = first + j;
+    if (row.k === "price" || row.k === "fg") {
+      const i = d + 1 - tl.d0;
+      const v = i >= 0 && i < tl.n ? (row.k === "price" ? tl.axes.price[i] : tl.axes.sentiment[i]) : NaN;
+      out[j] = Number.isNaN(v) ? null : v;
+    } else if (row.k === "hn") {
+      const t = got.hn;
+      const k = d - (dayNum(day0) - MT_BEFORE);
+      out[j] = t && k >= 0 && k < t.counts.length ? t.counts[k] : null;
+    } else {
+      const s = got[row.w];
+      if (!s) continue;
+      const k = d - dayNum(s.from);
+      const v = k >= 0 && k < s.values.length ? s.values[k] : null;
+      out[j] = typeof v === "number" && Number.isFinite(v) ? v : null;
+    }
+  }
+  return { vals: out, back };
+}
+/* the change into each day (from the last day that had a value), and which days were unusual */
+function unusualOf(row, vals, back) {
+  const ch = new Array(vals.length).fill(null);
+  let prev = null;
+  for (let j = 0; j < vals.length; j++) {
+    const v = vals[j];
+    if (v === null) continue;
+    if (prev !== null) {
+      if (row.kind === "log") ch[j] = v > 0 && prev > 0 ? Math.log(v / prev) : null;
+      else if (row.kind === "diff") ch[j] = v - prev;
+      else ch[j] = Math.log((v + 1) / (prev + 1));
+    }
+    prev = v;
+  }
+  const win = vals.slice(back);
+  const flags = new Array(win.length).fill(false);
+  if (row.kind === "count") {
+    const xs = win.filter((x) => x !== null).sort((a, b) => a - b);
+    const med = xs.length ? xs[Math.floor(xs.length / 2)] : 0;
+    win.forEach((x, i) => { flags[i] = x !== null && x >= 5 && x >= 3 * Math.max(1, med); });
+    return { flags, ch: ch.slice(back), usual: med };
+  }
+  const base = ch.slice(0, back).filter((x) => x !== null).map(Math.abs).sort((a, b) => a - b);
+  if (base.length < 30) return { flags, ch: ch.slice(back), usual: null };
+  const sigma = 1.4826 * base[Math.floor(base.length / 2)];
+  const c = ch.slice(back);
+  c.forEach((x, i) => { flags[i] = x !== null && sigma > 0 && Math.abs(x) >= 3 * sigma; });
+  return { flags, ch: c, usual: sigma };
+}
+let mtToken = 0;
+async function renderTogether() {
+  const token = ++mtToken;
+  const day0 = S.day;
+  const got = {};
+  const status = {};
+  const draw = () => { if (token === mtToken && S.view === "stand") drawTogether(day0, got, status); };
+  for (const r of TOGETHER) if (r.w) status[r.k] = "wait";
+  status.hn = "wait";
+  draw();
+  const jobs = TOGETHER.filter((r) => r.w).map((r) => loadSeries(r.w).then((s) => { got[r.w] = s; status[r.k] = "ok"; }).catch((e) => { status[r.k] = `could not be read (${e.message})`; }).then(draw));
+  jobs.push(loadTalk(coinNow().x, day0).then((t) => { got.hn = t; status.hn = "ok"; }).catch((e) => { status.hn = `could not be read (${e.message})`; }).then(draw));
+  await Promise.allSettled(jobs);
+}
+function drawTogether(day0, got, status) {
+  const box = $("mt");
+  const W = Math.max(300, Math.round(box.getBoundingClientRect().width) - 12 || 360);
+  // iPhone first: the name and the day's value sit above each line, so every line gets the full width
+  const L = 6, R = 6, ROW = 44, LINE_TOP = 17, GROUP = 22, TOP = 2, AX = 22;
+  const n = MT_BEFORE + MT_AFTER + 1;
+  const X = (j) => L + (j / (n - 1)) * (W - L - R);
+  let H = TOP + AX;
+  for (const r of TOGETHER) H += r.group ? GROUP : ROW;
+  const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, "aria-hidden": "true" });
+  const g = svg("g");
+  root.append(g);
+  // the day itself, down every row
+  g.append(svg("rect", { x: X(MT_BEFORE) - 3, y: TOP, width: 6, height: H - TOP - AX, fill: "var(--wash)" }));
+  let y = TOP;
+  const around = [], later = [];
+  for (const r of TOGETHER) {
+    if (r.group) {
+      g.append(svg("text", { x: L, y: y + 16, "font-size": 10, "font-weight": 700, "letter-spacing": "0.06em", fill: "var(--muted)" }, r.group.toUpperCase()));
+      y += GROUP;
+      continue;
+    }
+    const mid = y + LINE_TOP + (ROW - LINE_TOP) / 2;
+    g.append(svg("line", { x1: L, x2: W - R, y1: y + ROW - 0.5, y2: y + ROW - 0.5, stroke: "var(--grid)", "stroke-width": 1, "shape-rendering": "crispEdges" }));
+    g.append(svg("text", { x: L, y: y + 13, "font-size": 11.5, "font-weight": r.main ? 700 : 600, fill: r.main ? "var(--ink)" : "var(--ink-2)" }, r.name()));
+    const st = status[r.k];
+    if (st && st !== "ok") {
+      g.append(svg("text", { x: L, y: mid + 4, "font-size": 11, fill: "var(--muted)" }, st === "wait" ? "…" : st.length > 48 ? st.slice(0, 47) + "…" : st));
+      y += ROW;
+      continue;
+    }
+    const { vals, back } = dailyOf(r, got, day0);
+    const win = vals.slice(back);
+    const u = unusualOf(r, vals, back);
+    const xs = win.filter((v) => v !== null);
+    if (!xs.length) {
+      const why = r.k === "fg" ? `the index starts on ${meta.fng_from || "2023-06-29"}` : r.k === "wiki" || r.k === "wikitotal" ? "Wikipedia's daily counts start on 2015-07-01" : "no values for these days";
+      g.append(svg("text", { x: L, y: mid + 4, "font-size": 11, fill: "var(--muted)" }, why));
+      y += ROW;
+      continue;
+    }
+    const lo = Math.min(...xs), hi = Math.max(...xs);
+    const Y = (v) => (hi === lo ? mid : y + ROW - 4 - ((v - lo) / (hi - lo)) * (ROW - LINE_TOP - 6));
+    let d = "";
+    win.forEach((v, j) => { if (v !== null) d += (d ? "L" : "M") + X(j).toFixed(1) + "," + Y(v).toFixed(1); });
+    g.append(svg("path", { d, fill: "none", stroke: r.main ? "var(--series-d)" : "var(--ink-2)", "stroke-width": r.main ? 1.8 : 1.3, "stroke-linejoin": "round", "stroke-linecap": "round", opacity: r.main ? 1 : 0.85 }));
+    win.forEach((v, j) => {
+      if (!u.flags[j] || v === null) return;
+      g.append(svg("circle", { cx: X(j), cy: Y(v), r: 3.4, fill: r.main ? "var(--series-d)" : "var(--ink)", stroke: "var(--surface)", "stroke-width": 1.5 }));
+      const o = j - MT_BEFORE;
+      if (Math.abs(o) <= 1) { if (!around.includes(r.name())) around.push(r.name()); } else if (o > 1 && !later.some((x) => x[0] === r.name())) later.push([r.name(), o]);
+    });
+    // on the right: what that window did on the day itself
+    const c = u.ch[MT_BEFORE];
+    let lab = "—";
+    if (win[MT_BEFORE] === null) lab = r.w && ["nasdaq", "vix", "usd"].includes(r.w) ? "closed" : "—";
+    else if (c !== null && c !== undefined) lab = r.kind === "diff" ? `${c > 0 ? "+" : c < 0 ? MINUS : ""}${Math.abs(Math.round(c))}` : r.kind === "count" ? `${win[MT_BEFORE]}` : pct(Math.exp(c) - 1, 0);
+    g.append(svg("text", { x: W - R, y: y + 13, "text-anchor": "end", "font-size": 11.5, "font-weight": 650, fill: u.flags[MT_BEFORE] ? "var(--ink)" : "var(--muted)", style: "font-variant-numeric:tabular-nums" }, `the day ${lab}`));
+    y += ROW;
+  }
+  for (const o of [-7, 0, 7, 14, 30]) {
+    g.append(svg("text", { x: X(o + MT_BEFORE), y: H - 6, "text-anchor": o === -7 ? "start" : o === 30 ? "end" : "middle", "font-size": 10.5, fill: o === 0 ? "var(--ink-2)" : "var(--muted)", "font-weight": o === 0 ? 700 : 400 }, o === 0 ? "the day" : o > 0 ? `+${o}d` : `${MINUS}${-o}d`));
+  }
+  box.textContent = "";
+  box.append(root);
+  const waiting = Object.values(status).some((x) => x === "wait");
+  const sum = $("mt-sum");
+  if (waiting) { sum.textContent = ""; return; }
+  const parts = [];
+  if (!around.length) parts.push("Around the day (−1 to +1), no window had an unusual day.");
+  else if (around.length === 1) parts.push(`Around the day (−1 to +1), only ${around[0]} had an unusual day.`);
+  else parts.push(`Around the day (−1 to +1), these had an unusual day: ${around.join(", ")}.`);
+  if (later.length) parts.push(`Later: ${later.map(([nme, o]) => `${nme} (+${o}d)`).join(", ")}.`);
+  sum.textContent = parts.join(" ");
+  $("mt-note").textContent = "Each line is scaled to its own range, so heights cannot be compared across rows. Markets are closed at weekends. “The day”: what each window did on the day itself, against the day before.";
 }
 function checksInto(box, rep) {
   box.textContent = "";
@@ -1594,7 +1776,7 @@ function renderFooter() {
     const f = $(id);
     f.textContent = "";
     f.append(el("div", {}, "Data: CoinMarketCap API (quotes, OHLCV and Fear & Greed history for BTC, ETH, XRP, SOL and DOGE), kept in RE:'s own archive. RE: observes; it does not predict."));
-    f.append(el("div", {}, "Other windows: Wikimedia pageviews, Hacker News (Algolia), NASA APOD, USGS earthquakes, Open-Meteo weather, Blockchain.com, ECB rates via Frankfurter; X is a link only."));
+    f.append(el("div", {}, "Other windows: Wikimedia pageviews, Hacker News (Algolia), NASA APOD, USGS earthquakes, Open-Meteo weather, Blockchain.com, ECB rates via Frankfurter, FRED (Nasdaq, VIX, US dollar); X is a link only."));
   }
 }
 
