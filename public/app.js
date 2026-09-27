@@ -241,13 +241,15 @@ function setupControls() {
     b.addEventListener("click", () => { $("q").value = label; go({ q: w }, S.q !== w); });
     words.append(b);
   }
-  $("pick-day").addEventListener("click", () => { S.q = ""; standOn(S.day || ex.last); });
+  // any day starts somewhere random (2026-09-28, Shu: today is usually a weak place to stand — nothing has happened after it yet)
+  $("pick-day").addEventListener("click", () => { S.q = ""; standOn(randomDay()); });
   $("s-explore-link").addEventListener("click", () => go({ x: true, open: null }));
   // the day you stand on: each part of the big date has an invisible wheel on top, holding only days the archive has
   for (const id of ["d-y", "d-m", "d-d"]) $(id).addEventListener("change", () => pickFromWheels(id));
   $("prev-day").addEventListener("click", () => stepDay(-1));
   $("next-day").addEventListener("click", () => stepDay(1));
   $("latest").addEventListener("click", () => setDay(ex.last));
+  $("random").addEventListener("click", () => standOn(randomDay()));
   for (const id of ["how-link", "how-link2"]) $(id).addEventListener("click", () => go({ view: "how", open: null }));
   $("p-prev").addEventListener("click", () => stepPair(-1));
   $("p-next").addEventListener("click", () => stepPair(1));
@@ -296,6 +298,13 @@ function standOn(d) {
   S.x = false;
   run(false);
   writeHash(true);
+}
+/* a random day (2026-09-28, Shu): one with a year of past behind it and a month after it, so every way of overlapping can look */
+function randomDay() {
+  const n = ex.tl.n, lo = Math.min(365, n - 1), hi = Math.max(lo, n - 1 - 30);
+  let d;
+  do { d = ymdOf(ex.tl.d0 + lo + Math.floor(Math.random() * (hi - lo + 1))); } while (d === S.day && hi > lo);
+  return d;
 }
 function setDay(d) {
   S.day = d < ex.first ? ex.first : d > ex.last ? ex.last : d;
