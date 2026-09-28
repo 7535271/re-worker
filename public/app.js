@@ -1044,7 +1044,7 @@ function renderWhyPair(r, found) {
   if (r.by.m) used.push(`At 00:00 used only what the market showed up to 00:00 on each day${r.by.m.later ? ` (${r.day} is later in history)` : ""}.`);
   if (r.by.v || r.by.p) used.push(`${r.by.v && r.by.p ? "Afterwards and together" : r.by.v ? "Afterwards" : "Together"} used what happened after (hindsight)${r.by.v && r.by.v.stretch !== 1 ? ` — that day's move took ${r.by.v.stretch < 1 ? "about half" : "about twice"} as long` : ""}.`);
   if (r.by.w) used.push(`The word was found with today's records of “${S.q}”.`);
-  box.append(el("p", { class: "n" }, `${used.join(" ")} What came after is shown for both days either way.`));
+  box.append(el("p", { class: "n" }, used.join(" ")));
   const ul = el("ul", { class: "conds" });
   for (const k of KIND_ORDER) if (k !== "w" || S.q) ul.append(el("li", { class: found.includes(k) ? "on" : "" }, cond[k]));
   box.append(ul);
