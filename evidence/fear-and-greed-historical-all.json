@@ -1,0 +1,111 @@
+{
+  "_summary": {
+    "count": 1187,
+    "distinct_days": 1187,
+    "oldest": "2023-06-29",
+    "newest": "2026-09-27",
+    "span_days": 1187,
+    "missing_days": {
+      "count": 0,
+      "items": []
+    },
+    "duplicate_days": {
+      "count": 0,
+      "items": []
+    },
+    "off_midnight": {
+      "count": 0,
+      "items": []
+    },
+    "exact_repeats": 0,
+    "pages": 3,
+    "credits": 3,
+    "ok": true
+  },
+  "pages": [
+    {
+      "request": {
+        "endpoint": "/v3/fear-and-greed/historical",
+        "params": {
+          "start": 1,
+          "limit": 500
+        },
+        "url": "https://pro-api.coinmarketcap.com/v3/fear-and-greed/historical?start=1&limit=500",
+        "at": "2026-09-28T18:01:08.197Z"
+      },
+      "http_status": 200,
+      "status": {
+        "timestamp": "2026-09-28T18:01:08.294Z",
+        "error_code": "0",
+        "error_message": "",
+        "elapsed": 4,
+        "credit_count": 1
+      },
+      "count": 500
+    },
+    {
+      "request": {
+        "endpoint": "/v3/fear-and-greed/historical",
+        "params": {
+          "start": 501,
+          "limit": 500
+        },
+        "url": "https://pro-api.coinmarketcap.com/v3/fear-and-greed/historical?start=501&limit=500",
+        "at": "2026-09-28T18:01:08.367Z"
+      },
+      "http_status": 200,
+      "status": {
+        "timestamp": "2026-09-28T18:01:08.455Z",
+        "error_code": "0",
+        "error_message": "",
+        "elapsed": 3,
+        "credit_count": 1
+      },
+      "count": 500
+    },
+    {
+      "request": {
+        "endpoint": "/v3/fear-and-greed/historical",
+        "params": {
+          "start": 1001,
+          "limit": 500
+        },
+        "url": "https://pro-api.coinmarketcap.com/v3/fear-and-greed/historical?start=1001&limit=500",
+        "at": "2026-09-28T18:01:08.529Z"
+      },
+      "http_status": 200,
+      "status": {
+        "timestamp": "2026-09-28T18:01:08.628Z",
+        "error_code": "0",
+        "error_message": "",
+        "elapsed": 5,
+        "credit_count": 1
+      },
+      "count": 187
+    }
+  ],
+  "newest_rows": [
+    {
+      "timestamp": "1790467200",
+      "value": 72,
+      "value_classification": "Greed"
+    },
+    {
+      "timestamp": "1790380800",
+      "value": 73,
+      "value_classification": "Greed"
+    }
+  ],
+  "oldest_rows": [
+    {
+      "timestamp": "1688083200",
+      "value": 59,
+      "value_classification": "Neutral"
+    },
+    {
+      "timestamp": "1687996800",
+      "value": 59,
+      "value_classification": "Neutral"
+    }
+  ]
+}
