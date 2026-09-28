@@ -160,7 +160,7 @@ async function boot() {
     const next = {};
     // a coin opens once its archive is whole up to its last stored day. If only the years from that
     // day on are missing, the newest days simply stopped coming (e.g. after the CMC key ends on
-    // 2026-10-08): every stored day still works, so the coin stays open (same rule: test/run.mjs §7)
+    // 2026-10-08): every stored day still works, so the coin stays open (same rule: test/run.js §7)
     for (const a of st.archives || []) {
       const miss = Array.isArray(a.missing_years) ? a.missing_years : null;
       const last = a.last_on && a.last_on.price ? Number(a.last_on.price.slice(0, 4)) : null;
@@ -1158,7 +1158,7 @@ function comparedOf(r) {
     lines: [line(q), line(c)],
     mark: 1,
     axis: [`${MINUS}${w - 1}d`, "", "the day"],
-    note: traj ? "The price's change from the first day of each range (frctlns also compares volume, volatility and Fear & Greed)." : "The price's place within its own past year: 0 = its lowest, 1 = its highest (frctlns compares every part of the market this way; the price stands for them here).",
+    note: traj ? "The price's change from the first day of each range (frctlns also compares volume, volatility and Fear & Greed)." : "The price's place within its own past year: 0 = its lowest, 1 = its highest (frctlns compares every part of the market this way, except Fear & Greed, which keeps its own 0–100 scale; the price stands for them here).",
     fixed01: !traj,
   };
 }

@@ -685,8 +685,8 @@
     </section>
     <section class="card explain">
       <h3>How frctlns finds overlaps</h3>
-      <p><strong>Places that overlap</strong>: for the day you stand on, frctlns looks three ways at once — four when you came with a word — and lists every day it found, the most overlap first.</p>
-      <p><strong>At 00:00</strong>: where the market stood over the 7 days up to each day — price, market cap, volume, volatility, 24h / 7d / 30d change and Fear &amp; Greed, each as a place within its own past year. Only what was out by 00:00 UTC of each day is used, and an earlier day counts only if its own next 30 days had already happened.</p>
+      <p><strong>Places that overlap</strong>: for the day you stand on, frctlns looks three ways at once — four when you came with a word — and lists the days it found, the most overlap first.</p>
+      <p><strong>At 00:00</strong>: where the market stood over the 7 days up to each day — price, market cap, volume, volatility and 24h / 7d / 30d change, each as a place within its own past year, and Fear &amp; Greed on its own 0–100 scale. Only what was out by 00:00 UTC of each day is used, and an earlier day counts only if its own next 30 days had already happened. Near the start of the archive, where fewer than five earlier days qualify, later days fill in and are shown as later.</p>
       <p><strong>Afterwards</strong> (hindsight): the shape of the price from 2 days before to a week after. Only the shape counts — a smaller move, or one that took half or twice as long, can still match.</p>
       <p><strong>Together</strong> (hindsight): the set of windows that made an unusual jump on the day or the day after — a change at least 3× that window's usual day-to-day change over the year before — found again on another day. The directions are shown, not required.</p>
       <p><strong>The word</strong>: the days a word left public traces — its English Wikipedia article read far more than usual (from 2015-07-01), or a Hacker News story with it in the title at its most points. Found with today's records; not an event detector.</p>
@@ -709,8 +709,8 @@
         <div class="wr"><b>Earth</b><span class="at">at 00:00: the day before</span><span class="src">USGS earthquake catalog</span><span class="what">earthquakes of magnitude 4.5+, and the largest</span></div>
         <div class="wr"><b>Sky</b><span class="at">at 00:00: the day before</span><span class="src">NASA Astronomy Picture of the Day</span><span class="what">the picture's title and credit</span></div>
         <div class="wr"><b>Weather</b><span class="at">at 00:00: 2 days before</span><span class="src">Open-Meteo</span><span class="what">the day's weather in one of ten cities</span></div>
-        <div class="wr"><b>Nasdaq · VIX · US dollar</b><span class="at">what moved with it (hindsight)</span><span class="src">FRED</span><span class="what">daily closes; markets are closed at weekends</span></div>
-        <div class="wr"><b>All of Wikipedia</b><span class="at">what moved with it (hindsight)</span><span class="src">Wikimedia pageviews</span><span class="what">total views of English Wikipedia</span></div>
+        <div class="wr"><b>Nasdaq · VIX · US dollar</b><span class="at">hindsight only</span><span class="src">FRED</span><span class="what">daily closes, used in what moved with it and together; markets are closed at weekends</span></div>
+        <div class="wr"><b>All of Wikipedia</b><span class="at">hindsight only</span><span class="src">Wikimedia pageviews</span><span class="what">total views of English Wikipedia, used in what moved with it and together</span></div>
       </div>
     </section>
     <footer id="footer-how"></footer>
