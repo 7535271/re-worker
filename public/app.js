@@ -158,7 +158,14 @@ async function boot() {
   readHash();
   fetch("/archive/status", { cache: "no-store" }).then((r) => r.json()).then((st) => {
     const next = {};
-    for (const a of st.archives || []) next[a.id] = a.complete === true;
+    // a coin opens once its archive is whole up to its last stored day. If only the years from that
+    // day on are missing, the newest days simply stopped coming (e.g. after the CMC key ends on
+    // 2026-10-08): every stored day still works, so the coin stays open (same rule: test/run.mjs §7)
+    for (const a of st.archives || []) {
+      const miss = Array.isArray(a.missing_years) ? a.missing_years : null;
+      const last = a.last_on && a.last_on.price ? Number(a.last_on.price.slice(0, 4)) : null;
+      next[a.id] = a.complete === true || (last !== null && !!miss && miss.every((y) => y >= last));
+    }
     ready = { ...next, "1": true };
     if (S.view === "home") renderCoins();
   }).catch(() => {});
