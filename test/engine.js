@@ -1,6 +1,6 @@
 // Tests for public/engine.js — the browser-side observer (STATE / TRAJECTORY / STRICT / replay).
 import * as E from "../public/engine.js";
-import { clock, KV, runCron, get, ds } from "./mock.mjs";
+import { clock, KV, runCron, get, ds } from "./mock.js";
 import worker from "../src/worker.js";
 
 let failures = 0;

@@ -1,4 +1,4 @@
-import { clock, cfg, calls, KV, runCron, get, ds, ymd, iso, g, fngValueFor } from "./mock.mjs";
+import { clock, cfg, calls, KV, runCron, get, ds, ymd, iso, g, fngValueFor } from "./mock.js";
 import worker from "../src/worker.js";
 
 const DAY = 86400000, MIN = 60000, HOUR = 3600000;

@@ -19,7 +19,7 @@ console.log(badDay.length ? "FAIL isDay " + JSON.stringify(badDay) : "PASS isDay
 console.log(W.shiftDay("2024-12-31", 1) === "2025-01-01" && W.shiftDay("2024-03-01", -1) === "2024-02-29" && W.daysBetween("2013-04-28", "2026-09-25") === 4898 ? "PASS shiftDay/daysBetween" : "FAIL shiftDay/daysBetween");
 
 // CPU profile with realistic payloads (from the mock)
-const { clock } = await import("./mock.mjs");
+const { clock } = await import("./mock.js");
 clock.now = Date.parse("2026-09-25T00:05:00Z");
 const H = { "X-CMC_PRO_API_KEY": "k" };
 const base = "https://pro-api.coinmarketcap.com";

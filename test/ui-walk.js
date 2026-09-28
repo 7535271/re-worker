@@ -2,7 +2,7 @@
 import http from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
-import { clock, KV, runCron } from "./mock.mjs";
+import { clock, KV, runCron } from "./mock.js";
 import worker from "../src/worker.js";
 
 const OUT = process.argv[2] || "/tmp/re-shots3";
