@@ -33,12 +33,12 @@ From CMC, frctlns keeps its own archive of every day of five coins (Bitcoin, Eth
 
 For the day you stand on, frctlns looks three ways at once, or four when you came with a word:
 
-- **At 00:00.** Where the market stood over the 7 days up to each day. The measures are price, market cap, volume, volatility, 24h / 7d / 30d change and Fear & Greed, each as a place within its own past year. Only what was out by 00:00 UTC of each day is used. An earlier day counts only if its own next 30 days had already happened.
+- **At 00:00.** Where the market stood over the 7 days up to each day. The measures are price, market cap, volume, volatility and 24h / 7d / 30d change, each as a place within its own past year, and Fear & Greed on its own 0–100 scale. Only what was out by 00:00 UTC of each day is used. An earlier day counts only if its own next 30 days had already happened. Near the start of the archive, where fewer than five earlier days qualify, later days fill in and are shown as later.
 - **Afterwards** *(hindsight)*. The shape of the price from 2 days before to a week after. Only the shape counts, so a smaller move, or one that took half or twice as long, can still match.
 - **Together** *(hindsight)*. The set of windows that made an unusual jump on the day or the day after, found again on another day. An unusual jump is a change at least 3× that window's usual day-to-day change over the year before.
 - **The word.** The days a word left public traces: its English Wikipedia article read far more than usual (from 2015-07-01), or a Hacker News story with it in the title at its most points. These are found with today's records, so this is not an event detector.
 
-Every place found is listed, and the order is the mean of the three measures. Only what both days have is compared, and a day is compared only if at least half of the market can be compared. Everything that uses what came after a day is marked as hindsight. The at-00:00 comparison never uses it.
+Every place found is listed (for a word, up to five of its other days), and the order is the mean of the three measures. Only what both days have is compared, and a day is compared only if at least half of the market can be compared. Everything that uses what came after a day is marked as hindsight. The at-00:00 comparison never uses it.
 
 The full rules are in the app's Observatory (*Everything behind the overlaps*).
 
@@ -58,14 +58,14 @@ The full rules are in the app's Observatory (*Everything behind the overlaps*).
 | Sky | NASA Astronomy Picture of the Day | D−1 |
 | Weather | Open-Meteo | D−2 |
 
-Two more groups appear only in *What moved with it?*, which is hindsight: Nasdaq, VIX and the US dollar index (FRED), and all of English Wikipedia. Fear & Greed covers the whole crypto market and the Bitcoin network is Bitcoin's own chain, so both are the same for every coin.
+Two more groups are used only in hindsight, in *What moved with it?* and in the *Together* search: Nasdaq, VIX and the US dollar index (FRED), and all of English Wikipedia. Fear & Greed covers the whole crypto market and the Bitcoin network is Bitcoin's own chain, so both are the same for every coin.
 
 ## Under the hood
 
 ### Architecture
 
 - A **Cloudflare Worker** (free plan) calls the CMC API and the other sources, and serves the page.
-- **Workers KV** holds the archive: one box per coin per year. A cron job runs every 5 minutes and does one unit of work for one coin: it fills a missing year, or re-fetches the last 10 days. A value that could not be fetched never overwrites a stored one.
+- **Workers KV** holds the archive: one box per coin per year. A cron job runs every 5 minutes and does one unit of work for one coin: it fills a missing year, or re-fetches the recent days (from 10 days ago to today). A failed fetch never overwrites stored data.
 - The **page** loads a coin's archive once. All market comparisons run in the browser (`public/engine.js`, pure functions), so moving between days needs no CMC call and no credits.
 
 ### How CMC is used
@@ -97,6 +97,7 @@ async function hit(env, path, params) {
 Three real responses, called on 2026-09-28, are saved in [`evidence/`](evidence/). Every request returned HTTP 200 and used 1 credit.
 
 **Quotes, Bitcoin, March 2020** ([full response](evidence/quotes-historical-btc-2020-03.json))
+
 `GET /v3/cryptocurrency/quotes/historical?id=1&time_start=2020-03-01&time_end=2020-03-31&interval=daily&convert=USD`
 
 ```json
@@ -114,6 +115,7 @@ Three real responses, called on 2026-09-28, are saved in [`evidence/`](evidence/
 ```
 
 **Fear & Greed, the whole history** ([summary of all pages](evidence/fear-and-greed-historical-all.json))
+
 3 pages of `GET /v3/fear-and-greed/historical` (`start=1`, `501`, `1001`; `limit=500`): 1,187 days from 2023-06-29 to 2026-09-27, with no missing, duplicate or off-midnight days.
 
 ```json
@@ -146,7 +148,7 @@ node test/scene.js           # the windows of a day, their clocks, caching, fail
 node test/window-series.js   # the numeric windows
 node test/windows.js         # the probes of each source
 node test/dates.js           # date arithmetic
-node test/ui-walk.js         # the whole app at iPhone size in a headless browser (needs Playwright)
+node test/ui-walk.js         # the whole app at iPhone size in a headless browser (needs Playwright; set its path in the file)
 ```
 
 <details>
@@ -160,9 +162,9 @@ node test/ui-walk.js         # the whole app at iPhone size in a headless browse
 | `/scene?day=YYYY-MM-DD` | that day through the other windows, with each window's clock |
 | `/window-series?w=…` | every day's value of one numeric window |
 | `/moments?q=…` | the days a word left public traces |
-| `/talk?q=…&day=…` | Hacker News stories with the word in the title, around a day |
+| `/talk?q=…&day=…` | daily counts of Hacker News stories with the word in the title, from 7 days before a day to 30 days after |
 | `/archive/status` | what the archive holds, what is missing, recent errors |
-| `/probe/btc`, `/probe/ohlcv`, `/probe/fng` | raw CMC responses (the evidence above) |
+| `/probe/btc`, `/probe/ohlcv`, `/probe/fng` | raw CMC responses; every Fear & Greed page, summarized (the evidence above) |
 | `/probe/*` | raw responses from the other sources |
 
 ```
@@ -183,7 +185,8 @@ Deploy: Cloudflare Workers with Git integration (a commit to `main` deploys). Ad
 
 - **The CMC key expires on 2026-10-08.** After that, frctlns keeps working from its archive, but no new days are added, and *Latest* stays on the last stored day. The live CMC probes (`/probe/btc`, `/probe/ohlcv`, `/probe/fng`) stop returning data, and the saved copies in `evidence/` remain.
 - **Windows are uneven.** They differ in how far back they go (Attention from 2015-07-01, Fear & Greed from 2023-06-29), in how late they publish, and in whether they are revised later. Earlier days have fewer windows open.
-- **Some past days can only be shown as recorded today.** This applies to earthquakes, Hacker News points, the Bitcoin network and recent weather, and these are marked.
+- **Some past days can only be shown as recorded today.** This applies to earthquakes, Hacker News points, the Bitcoin network and recent weather, and these are marked in Explore.
+- **Some clocks are still being measured.** frctlns takes each Fear & Greed value at its timestamp (D 00:00 UTC), and uses safe delays for Attention, the Bitcoin network and the weather. When each value really first appears is being logged (`/probe/fng-timing`, `/probe/published`).
 - **A word finds traces, not events.**
 - frctlns is not a complete record of the world. It is a place to explore time through a few windows, and what it shows are observations, not predictions.
 
