@@ -135,18 +135,18 @@ What we had to learn by reading raw responses:
 
 ### Tests
 
-Offline tests with simulated services (Node 22+, no network, no key):
+Offline tests with simulated services (Node 22.12 or newer, no network, no key):
 
 ```
-node test/run.mjs            # archive, cron, five coins, time alignment, errors, key expiry
-node test/engine.mjs         # no future leakage, strict time, the 50% rule, the overlap measures
-node test/moments.mjs        # the days of a word, attention per coin, FRED, Hacker News counts
-node test/compare.mjs        # comparing through other windows without looking ahead
-node test/scene.mjs          # the windows of a day, their clocks, caching, failures
-node test/window-series.mjs  # the numeric windows
-node test/windows.mjs        # the probes of each source
-node test/dates.mjs          # date arithmetic
-node test/ui-walk.mjs        # the whole app at iPhone size in a headless browser (needs Playwright)
+node test/run.js             # archive, cron, five coins, time alignment, errors, key expiry
+node test/engine.js          # no future leakage, strict time, the 50% rule, the overlap measures
+node test/moments.js         # the days of a word, attention per coin, FRED, Hacker News counts
+node test/compare.js         # comparing through other windows without looking ahead
+node test/scene.js           # the windows of a day, their clocks, caching, failures
+node test/window-series.js   # the numeric windows
+node test/windows.js         # the probes of each source
+node test/dates.js           # date arithmetic
+node test/ui-walk.js         # the whole app at iPhone size in a headless browser (needs Playwright)
 ```
 
 <details>
