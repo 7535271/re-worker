@@ -3,7 +3,7 @@
 **Find two moments in time that overlap.** Look at both through the same windows, as each looked at 00:00, and at what came after each.
 
 - **Live app:** https://re-worker.stella-753-5271.workers.dev/
-- **Demo video:** *(link)*
+- **Demo video:** https://youtube.com/shorts/satBY6l2Oz4
 - **Built for** Build with CMC: API Hackathon (DoraHacks, September 2026) · **Track:** Data and Visualisation
 
 frctlns observes; it does not predict. It is not investment advice.
