@@ -178,6 +178,8 @@
   .chart-wrap { position: relative; margin: 4px -4px 0; }
   .chart-wrap svg { display: block; width: 100%; height: auto; touch-action: pan-y; outline: none; }
   .chart-wrap svg:focus-visible { box-shadow: 0 0 0 2px var(--series-d); border-radius: 8px; }
+  /* touching a chart reads it; it never starts a text selection (2026-09-29, Shu: the blue copy handles kept appearing on iPhone) */
+  .chart-wrap, .chart-wrap *, .mt svg, .mt svg *, .pcmp svg, .pcmp svg * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); margin: 2px 0 6px; }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .legend i { display: inline-block; width: 16px; height: 2px; border-radius: 1px; }
